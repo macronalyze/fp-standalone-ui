@@ -1,5 +1,6 @@
 import { Type } from '@angular/core';
 import { EightCoreIndustriesComponent } from './eight-core-industries/eight-core-industries.component';
+import { ImportExportComponent } from './import-export/import-export.component';
 
 interface DatasetExperience {
   component?: Type<unknown>;
@@ -8,6 +9,9 @@ interface DatasetExperience {
 const DATASET_EXPERIENCES: Record<string, DatasetExperience> = {
   'eight-core-industries': {
     component: EightCoreIndustriesComponent,
+  },
+  'import-export': {
+    component: ImportExportComponent,
   },
 };
 

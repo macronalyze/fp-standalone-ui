@@ -29,9 +29,10 @@
       "name": "Import / Export Trade Data",
       "shortName": "Trade Data",
       "icon": "local_shipping",
-      "latestPeriod": "Coming soon",
+      "latestPeriod": "Feb 2026",
       "latestGrowth": null,
-      "status": "coming-soon"
+      "status": "available",
+      "releaseDate": "2026-03-15"
     }
   ]
 }
