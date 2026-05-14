@@ -1,0 +1,233 @@
+<div class="item-charts-page">
+  <div class="page-header">
+    <a [routerLink]="['/country', country, 'datasets']" class="back-btn">&#8592; Datasets</a>
+    <h1>IIP Item-Level Charts</h1>
+    <p class="subtitle">Index of Industrial Production — Item-wise Index Values (Base: 2011-12)</p>
+  </div>
+
+  <div class="filter-panel">
+    <div class="filter-row">
+      <div class="filter-group">
+        <div class="filter-label-row">
+          <label class="filter-label">Item Group</label>
+          <div class="topn-btns">
+            @for (n of topNOptions; track n) {
+              <button
+                type="button"
+                class="topn-btn"
+                [class.active]="topN() === n"
+                (click)="selectTopN(n)">
+                Top {{ n }}
+              </button>
+            }
+          </div>
+        </div>
+
+        <div class="multi-select-wrapper">
+          <!-- Trigger button -->
+          <button type="button" class="ms-trigger" (click)="toggleDropdown()">
+            @if (effectiveGroups().length === 0) {
+              <span class="ms-placeholder">Select item groups…</span>
+            } @else {
+              <span class="ms-count">{{ effectiveGroups().length }} selected</span>
+            }
+            <span class="ms-arrow" [class.open]="dropdownOpen()">&#9660;</span>
+          </button>
+
+          <!-- Selected chips -->
+          @if (effectiveGroups().length > 0) {
+            <div class="ms-chips">
+              @for (g of effectiveGroups(); track g) {
+                <span class="chip">
+                  {{ g }}
+                  <button type="button" class="chip-remove" (click)="removeGroup(g)">&#215;</button>
+                </span>
+              }
+              <button type="button" class="clear-btn" (click)="clearAll()">Clear all</button>
+            </div>
+          }
+
+          <!-- Dropdown panel -->
+          @if (dropdownOpen()) {
+            <div class="ms-dropdown">
+              <input
+                type="text"
+                class="ms-search"
+                placeholder="Search item groups…"
+                [ngModel]="searchQuery()"
+                (ngModelChange)="searchQuery.set($event)"
+                (click)="$event.stopPropagation()"
+              />
+              <div class="ms-select-all-row">
+                <label class="ms-option ms-select-all" [class.selected]="isAllFilteredSelected()">
+                  <input
+                    type="checkbox"
+                    [checked]="isAllFilteredSelected()"
+                    (change)="selectAll()"
+                    (click)="$event.stopPropagation()"
+                  />
+                  <strong>{{ isAllFilteredSelected() ? 'Deselect All' : 'Select All' }}</strong>
+                  <span class="ms-select-all-count">({{ filteredGroups().length }})</span>
+                </label>
+              </div>
+              <div class="ms-list">
+                @for (group of filteredGroups(); track group) {
+                  <label class="ms-option" [class.selected]="isSelected(group)">
+                    <input
+                      type="checkbox"
+                      [checked]="isSelected(group)"
+                      (change)="toggleGroup(group)"
+                    />
+                    {{ group }}
+                  </label>
+                }
+                @if (filteredGroups().length === 0) {
+                  <p class="ms-empty">No results found</p>
+                }
+              </div>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+
+    <div class="filter-row">
+      <div class="filter-group period-group">
+        <span class="filter-label">Period</span>
+        <div class="period-selects">
+          <label>
+            From
+            <input
+              type="month"
+              [value]="fromPeriod()"
+              [min]="minPeriod"
+              [max]="toPeriod()"
+              (change)="setFromPeriod($any($event.target).value)"
+            />
+          </label>
+          <span class="period-arrow">&#8594;</span>
+          <label>
+            To
+            <input
+              type="month"
+              [value]="toPeriod()"
+              [min]="fromPeriod()"
+              [max]="maxPeriod"
+              (change)="setToPeriod($any($event.target).value)"
+            />
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  @if (groupStats().length > 0) {
+    <div class="stat-bars-section">
+      <div class="stat-bars-period">% Change: {{ fromPeriod() }} &#8594; {{ toPeriod() }}</div>
+      @for (stat of groupStats(); track stat.group) {
+        <div class="single-stat-bar">
+          <!-- Header row -->
+          <div class="stat-bar-header">
+            <span class="single-stat-color-dot" [style.background]="stat.color"></span>
+            <span class="single-stat-group">{{ stat.group }}</span>
+            <span class="single-stat-values">{{ stat.fromVal ?? 'N/A' }} &#8594; {{ stat.toVal ?? 'N/A' }}</span>
+            <span class="single-stat-pct"
+              [class.positive]="stat.pct !== null && stat.pct >= 0"
+              [class.negative]="stat.pct !== null && stat.pct < 0">
+              @if (stat.pct !== null) {
+                {{ stat.pct >= 0 ? '+' : '' }}{{ stat.pct }}%
+              } @else {
+                N/A
+              }
+            </span>
+          </div>
+
+          <!-- Monthly values row -->
+          <div class="stat-monthly-row">
+            <span class="stat-row-label">Values:</span>
+            <div class="stat-pills-scroll">
+              @for (m of stat.monthlyData; track m.period) {
+                <span class="stat-pill">
+                  <span class="pill-period">{{ m.period }}</span>
+                  <span class="pill-value">{{ m.value ?? 'N/A' }}</span>
+                </span>
+              }
+            </div>
+          </div>
+
+          <!-- MoM % change row -->
+          <div class="stat-monthly-row">
+            <span class="stat-row-label">MoM %:</span>
+            <div class="stat-pills-scroll">
+              @for (m of stat.momData; track m.period) {
+                <span class="stat-pill" [class.pill-pos]="m.mom !== null && m.mom >= 0" [class.pill-neg]="m.mom !== null && m.mom < 0">
+                  <span class="pill-period">{{ m.period }}</span>
+                  @if (m.mom !== null) {
+                    <span class="pill-yoy">
+                      <span class="yoy-arrow">{{ m.mom >= 0 ? '&#9650;' : '&#9660;' }}</span>
+                      {{ m.mom >= 0 ? '+' : '' }}{{ m.mom }}%
+                    </span>
+                  } @else {
+                    <span class="pill-yoy pill-na">N/A</span>
+                  }
+                </span>
+              }
+            </div>
+          </div>
+
+          <!-- Prior-year values row -->
+          <div class="stat-monthly-row">
+            <span class="stat-row-label">Prev Year:</span>
+            <div class="stat-pills-scroll">
+              @for (m of stat.yoyData; track m.period) {
+                <span class="stat-pill stat-pill-prev">
+                  <span class="pill-period">{{ m.prevYearPeriod }}</span>
+                  <span class="pill-value">{{ m.prevYearVal ?? 'N/A' }}</span>
+                </span>
+              }
+            </div>
+          </div>
+
+          <!-- YoY % change row -->
+          <div class="stat-monthly-row">
+            <span class="stat-row-label">YoY %:</span>
+            <div class="stat-pills-scroll">
+              @for (m of stat.yoyData; track m.period) {
+                <span class="stat-pill" [class.pill-pos]="m.yoy !== null && m.yoy >= 0" [class.pill-neg]="m.yoy !== null && m.yoy < 0">
+                  <span class="pill-period">{{ m.period }}</span>
+                  @if (m.yoy !== null) {
+                    <span class="pill-yoy">
+                      <span class="yoy-arrow">{{ m.yoy >= 0 ? '&#9650;' : '&#9660;' }}</span>
+                      {{ m.yoy >= 0 ? '+' : '' }}{{ m.yoy }}%
+                    </span>
+                  } @else {
+                    <span class="pill-yoy pill-na">N/A</span>
+                  }
+                </span>
+              }
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <div class="charts-grid">
+    <div class="chart-card">
+      <canvas baseChart
+        [data]="lineChartData()"
+        [options]="lineChartOptions"
+        type="line">
+      </canvas>
+    </div>
+
+    <div class="chart-card">
+      <canvas baseChart
+        [data]="barChartData()"
+        [options]="barChartOptions"
+        type="bar">
+      </canvas>
+    </div>
+  </div>
+
+</div>

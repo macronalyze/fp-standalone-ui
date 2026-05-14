@@ -1,0 +1,486 @@
+<div class="hl-page">
+
+  <!-- ── Page Header ───────────────────────────────────────────────────── -->
+  <div class="hl-page-header">
+    <a [routerLink]="['/country', country, 'datasets']" class="hl-back-btn">&#8592; Datasets</a>
+    <h1>Import &amp; Export – High Level Analysis</h1>
+    <p class="hl-subtitle">
+      Mapped commodity trends · MoM % change · USD Millions · Period comparison
+    </p>
+  </div>
+
+  <!-- ── Shared Period Filter ──────────────────────────────────────────── -->
+  <div class="hl-period-bar">
+    <span class="hl-period-label">Period</span>
+    <div class="hl-period-selects">
+      <label>
+        From
+        <input type="month"
+          [value]="fromPeriod()"
+          [min]="minPeriod"
+          [max]="toPeriod()"
+          (change)="setFromPeriod($any($event.target).value)" />
+      </label>
+      <span class="hl-arrow">&#8594;</span>
+      <label>
+        To
+        <input type="month"
+          [value]="toPeriod()"
+          [min]="fromPeriod()"
+          [max]="maxPeriod"
+          (change)="setToPeriod($any($event.target).value)" />
+      </label>
+    </div>
+    @if (comparisonLabel) {
+      <span class="hl-comparison-badge">Comparing: {{ comparisonLabel }}</span>
+    }
+  </div>
+
+  <!-- ── Two-column layout ────────────────────────────────────────────── -->
+  <div class="hl-columns">
+
+    <!-- ════════════════════════════════════════════════════════════════
+         LEFT — IMPORT
+    ════════════════════════════════════════════════════════════════ -->
+    <section class="hl-col hl-col--import">
+
+      <h2 class="hl-col-title hl-col-title--import">&#8595; Imports</h2>
+
+      <!-- Import Filters -->
+      <div class="hl-col-filters">
+
+        <!-- Import Commodity multi-select -->
+        <div class="hl-filter-group">
+          <label class="hl-filter-label">
+            Commodity
+            <span class="hl-optional">(empty&nbsp;=&nbsp;all)</span>
+          </label>
+
+          <div class="hl-imp-comm-wrapper">
+            <button type="button" class="hl-comm-trigger" (click)="toggleImpDrop()">
+              @if (impSelectedComms().length === 0) {
+                <span class="hl-placeholder">All commodities (30)</span>
+              } @else {
+                <span class="hl-comm-count">{{ impSelectedComms().length }} selected</span>
+              }
+              <span class="hl-arrow-down" [class.open]="impDropOpen()">&#9660;</span>
+            </button>
+
+            @if (impSelectedComms().length > 0) {
+              <div class="hl-chips">
+                @for (c of impSelectedComms(); track c) {
+                  <span class="hl-chip">
+                    {{ c }}
+                    <button type="button" class="hl-chip-remove" (click)="removeImpComm(c)">&#215;</button>
+                  </span>
+                }
+                <button type="button" class="hl-clear-btn" (click)="clearImpComms()">Clear all</button>
+              </div>
+            }
+
+            @if (impDropOpen()) {
+              <div class="hl-comm-dropdown">
+                <input type="text" class="hl-comm-search"
+                  placeholder="Search commodities…"
+                  [ngModel]="impCommSearch()"
+                  (ngModelChange)="impCommSearch.set($event)"
+                  (click)="$event.stopPropagation()" />
+
+                <div class="hl-select-all-row">
+                  <label class="hl-comm-option hl-select-all" [class.selected]="impIsAllFiltered()">
+                    <input type="checkbox"
+                      [checked]="impIsAllFiltered()"
+                      (change)="toggleAllImpFiltered()"
+                      (click)="$event.stopPropagation()" />
+                    <strong>{{ impIsAllFiltered() ? 'Deselect All' : 'Select All' }}</strong>
+                    <span class="hl-count-badge">({{ impFilteredCommList().length }})</span>
+                  </label>
+                </div>
+
+                <div class="hl-comm-list">
+                  @for (c of impFilteredCommList(); track c.label) {
+                    <label class="hl-comm-option" [class.selected]="isImpCommSelected(c.label)">
+                      <input type="checkbox"
+                        [checked]="isImpCommSelected(c.label)"
+                        (change)="toggleImpComm(c.label)" />
+                      {{ c.label }}
+                    </label>
+                  }
+                  @if (impFilteredCommList().length === 0) {
+                    <p class="hl-no-results">No commodities match.</p>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- Import Country single-select -->
+        <div class="hl-filter-group">
+          <label class="hl-filter-label">
+            Country
+            <span class="hl-optional">(empty&nbsp;=&nbsp;all)</span>
+          </label>
+          <select class="hl-country-select"
+            [ngModel]="impSelectedCountry()"
+            (ngModelChange)="impSelectedCountry.set($event)">
+            <option value="">All Countries</option>
+            @for (c of importCountries; track c) {
+              <option [value]="c">{{ c }}</option>
+            }
+          </select>
+        </div>
+
+      </div><!-- /hl-col-filters -->
+
+      <!-- Import Line Chart -->
+      <div class="hl-chart-card">
+        @if (periodRange().length === 0) {
+          <p class="hl-empty">No data in selected period.</p>
+        } @else {
+          <canvas baseChart
+            [data]="impLineChartData()"
+            [options]="impChartOptions"
+            type="line">
+          </canvas>
+        }
+      </div>
+
+      <!-- Import Detail Table -->
+      <div class="hl-table-card">
+        <div class="hl-table-header">
+          <h3 class="hl-table-title">
+            Import Detail
+            @if (comparisonLabel) {
+              <span class="hl-title-sub">{{ comparisonLabel }}</span>
+            }
+          </h3>
+          @if (impTableData().length > 0) {
+            <span class="hl-row-count">{{ impTableData().length }} rows</span>
+          }
+        </div>
+
+        @if (impTableData().length === 0) {
+          <p class="hl-empty">No data matches the selected filters.</p>
+        } @else {
+          <div class="hl-table-scroll">
+            <table class="hl-table">
+              <thead>
+                <tr>
+                  <th class="rank">#</th>
+                  <th>Commodity</th>
+                  <th>Country</th>
+                  <th class="num">{{ labelFromPeriod(comparisonPeriods().prevDataPeriod) }} (USD M)</th>
+                  <th class="num">{{ labelFromPeriod(comparisonPeriods().toDataPeriod) }} (USD M)</th>
+                  <th class="num">MoM % Change</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of impTableData(); track row.label + row.country; let i = $index) {
+                  <!-- Parent row -->
+                  <tr [class.row-pos]="row.pct !== null && row.pct > 0"
+                      [class.row-neg]="row.pct !== null && row.pct < 0"
+                      [class.hl-row-expandable]="row.subRows.length > 1"
+                      (click)="row.subRows.length > 1 && toggleImpRow(row.label + '|' + row.country)">
+                    <td class="rank">
+                      @if (row.subRows.length > 1) {
+                        <span class="hl-expand-icon">{{ isImpRowExpanded(row.label + '|' + row.country) ? '&#9660;' : '&#9654;' }}</span>
+                      } @else {
+                        {{ i + 1 }}
+                      }
+                    </td>
+                    <td class="hl-commodity" [title]="row.label">
+                      <span class="hl-rank-num">{{ i + 1 }}.</span> {{ row.label }}
+                    </td>
+                    <td>{{ row.country }}</td>
+                    <td class="num">{{ row.prevUsd.toFixed(3) }}</td>
+                    <td class="num">{{ row.toUsd.toFixed(3) }}</td>
+                    <td class="num">
+                      @if (row.pct !== null) {
+                        <span [class.pos]="row.pct > 0" [class.neg]="row.pct < 0">
+                          {{ row.pct > 0 ? '+' : '' }}{{ row.pct }}%
+                        </span>
+                      } @else {
+                        <span class="hl-na">N/A</span>
+                      }
+                    </td>
+                  </tr>
+                  @if (isImpRowExpanded(row.label + '|' + row.country)) {
+                    @for (sub of row.subRows; track sub.rawKey) {
+                      <tr class="hl-sub-row"
+                          [class.hl-row-expandable]="sub.countryRows.length > 0"
+                          (click)="sub.countryRows.length > 0 && toggleImpSubRow(row.label + '|' + row.country + '|' + sub.rawKey, $event)">
+                        <td class="rank">
+                          @if (sub.countryRows.length > 0) {
+                            <span class="hl-expand-icon">{{ isImpSubRowExpanded(row.label + '|' + row.country + '|' + sub.rawKey) ? '&#9660;' : '&#9654;' }}</span>
+                          }
+                        </td>
+                        <td class="hl-sub-commodity" [title]="sub.rawKey">&#8627; {{ sub.rawKey }}</td>
+                        <td>{{ sub.country }}</td>
+                        <td class="num">{{ sub.prevUsd.toFixed(3) }}</td>
+                        <td class="num">{{ sub.toUsd.toFixed(3) }}</td>
+                        <td class="num">
+                          @if (sub.pct !== null) {
+                            <span [class.pos]="sub.pct > 0" [class.neg]="sub.pct < 0">
+                              {{ sub.pct > 0 ? '+' : '' }}{{ sub.pct }}%
+                            </span>
+                          } @else {
+                            <span class="hl-na">N/A</span>
+                          }
+                        </td>
+                      </tr>
+                      @if (isImpSubRowExpanded(row.label + '|' + row.country + '|' + sub.rawKey)) {
+                        @for (cr of sub.countryRows; track cr.country) {
+                          <tr class="hl-sub-sub-row">
+                            <td class="rank"></td>
+                            <td class="hl-sub-sub-commodity" [title]="cr.country">&#8627;&#8627; {{ cr.country }}</td>
+                            <td>{{ cr.country }}</td>
+                            <td class="num">{{ cr.prevUsd.toFixed(3) }}</td>
+                            <td class="num">{{ cr.toUsd.toFixed(3) }}</td>
+                            <td class="num">
+                              @if (cr.pct !== null) {
+                                <span [class.pos]="cr.pct > 0" [class.neg]="cr.pct < 0">
+                                  {{ cr.pct > 0 ? '+' : '' }}{{ cr.pct }}%
+                                </span>
+                              } @else {
+                                <span class="hl-na">N/A</span>
+                              }
+                            </td>
+                          </tr>
+                        }
+                      }
+                    }
+                  }
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+
+    </section>
+
+    <!-- ════════════════════════════════════════════════════════════════
+         RIGHT — EXPORT
+    ════════════════════════════════════════════════════════════════ -->
+    <section class="hl-col hl-col--export">
+
+      <h2 class="hl-col-title hl-col-title--export">&#8593; Exports</h2>
+
+      <!-- Export Filters -->
+      <div class="hl-col-filters">
+
+        <!-- Export Commodity multi-select -->
+        <div class="hl-filter-group">
+          <label class="hl-filter-label">
+            Commodity
+            <span class="hl-optional">(empty&nbsp;=&nbsp;all)</span>
+          </label>
+
+          <div class="hl-exp-comm-wrapper">
+            <button type="button" class="hl-comm-trigger" (click)="toggleExpDrop()">
+              @if (expSelectedComms().length === 0) {
+                <span class="hl-placeholder">All commodities (30)</span>
+              } @else {
+                <span class="hl-comm-count">{{ expSelectedComms().length }} selected</span>
+              }
+              <span class="hl-arrow-down" [class.open]="expDropOpen()">&#9660;</span>
+            </button>
+
+            @if (expSelectedComms().length > 0) {
+              <div class="hl-chips">
+                @for (c of expSelectedComms(); track c) {
+                  <span class="hl-chip">
+                    {{ c }}
+                    <button type="button" class="hl-chip-remove" (click)="removeExpComm(c)">&#215;</button>
+                  </span>
+                }
+                <button type="button" class="hl-clear-btn" (click)="clearExpComms()">Clear all</button>
+              </div>
+            }
+
+            @if (expDropOpen()) {
+              <div class="hl-comm-dropdown">
+                <input type="text" class="hl-comm-search"
+                  placeholder="Search commodities…"
+                  [ngModel]="expCommSearch()"
+                  (ngModelChange)="expCommSearch.set($event)"
+                  (click)="$event.stopPropagation()" />
+
+                <div class="hl-select-all-row">
+                  <label class="hl-comm-option hl-select-all" [class.selected]="expIsAllFiltered()">
+                    <input type="checkbox"
+                      [checked]="expIsAllFiltered()"
+                      (change)="toggleAllExpFiltered()"
+                      (click)="$event.stopPropagation()" />
+                    <strong>{{ expIsAllFiltered() ? 'Deselect All' : 'Select All' }}</strong>
+                    <span class="hl-count-badge">({{ expFilteredCommList().length }})</span>
+                  </label>
+                </div>
+
+                <div class="hl-comm-list">
+                  @for (c of expFilteredCommList(); track c.label) {
+                    <label class="hl-comm-option" [class.selected]="isExpCommSelected(c.label)">
+                      <input type="checkbox"
+                        [checked]="isExpCommSelected(c.label)"
+                        (change)="toggleExpComm(c.label)" />
+                      {{ c.label }}
+                    </label>
+                  }
+                  @if (expFilteredCommList().length === 0) {
+                    <p class="hl-no-results">No commodities match.</p>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        </div>
+
+        <!-- Export Country single-select -->
+        <div class="hl-filter-group">
+          <label class="hl-filter-label">
+            Country
+            <span class="hl-optional">(empty&nbsp;=&nbsp;all)</span>
+          </label>
+          <select class="hl-country-select"
+            [ngModel]="expSelectedCountry()"
+            (ngModelChange)="expSelectedCountry.set($event)">
+            <option value="">All Countries</option>
+            @for (c of exportCountries; track c) {
+              <option [value]="c">{{ c }}</option>
+            }
+          </select>
+        </div>
+
+      </div><!-- /hl-col-filters -->
+
+      <!-- Export Line Chart -->
+      <div class="hl-chart-card">
+        @if (periodRange().length === 0) {
+          <p class="hl-empty">No data in selected period.</p>
+        } @else {
+          <canvas baseChart
+            [data]="expLineChartData()"
+            [options]="expChartOptions"
+            type="line">
+          </canvas>
+        }
+      </div>
+
+      <!-- Export Detail Table -->
+      <div class="hl-table-card">
+        <div class="hl-table-header">
+          <h3 class="hl-table-title">
+            Export Detail
+            @if (comparisonLabel) {
+              <span class="hl-title-sub">{{ comparisonLabel }}</span>
+            }
+          </h3>
+          @if (expTableData().length > 0) {
+            <span class="hl-row-count">{{ expTableData().length }} rows</span>
+          }
+        </div>
+
+        @if (expTableData().length === 0) {
+          <p class="hl-empty">No data matches the selected filters.</p>
+        } @else {
+          <div class="hl-table-scroll">
+            <table class="hl-table">
+              <thead>
+                <tr>
+                  <th class="rank">#</th>
+                  <th>Commodity</th>
+                  <th>Country</th>
+                  <th class="num">{{ labelFromPeriod(comparisonPeriods().prevDataPeriod) }} (USD M)</th>
+                  <th class="num">{{ labelFromPeriod(comparisonPeriods().toDataPeriod) }} (USD M)</th>
+                  <th class="num">MoM % Change</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of expTableData(); track row.label + row.country; let i = $index) {
+                  <!-- Parent row -->
+                  <tr [class.row-pos]="row.pct !== null && row.pct > 0"
+                      [class.row-neg]="row.pct !== null && row.pct < 0"
+                      [class.hl-row-expandable]="row.subRows.length > 1"
+                      (click)="row.subRows.length > 1 && toggleExpRow(row.label + '|' + row.country)">
+                    <td class="rank">
+                      @if (row.subRows.length > 1) {
+                        <span class="hl-expand-icon">{{ isExpRowExpanded(row.label + '|' + row.country) ? '&#9660;' : '&#9654;' }}</span>
+                      } @else {
+                        {{ i + 1 }}
+                      }
+                    </td>
+                    <td class="hl-commodity" [title]="row.label">
+                      <span class="hl-rank-num">{{ i + 1 }}.</span> {{ row.label }}
+                    </td>
+                    <td>{{ row.country }}</td>
+                    <td class="num">{{ row.prevUsd.toFixed(3) }}</td>
+                    <td class="num">{{ row.toUsd.toFixed(3) }}</td>
+                    <td class="num">
+                      @if (row.pct !== null) {
+                        <span [class.pos]="row.pct > 0" [class.neg]="row.pct < 0">
+                          {{ row.pct > 0 ? '+' : '' }}{{ row.pct }}%
+                        </span>
+                      } @else {
+                        <span class="hl-na">N/A</span>
+                      }
+                    </td>
+                  </tr>
+                  @if (isExpRowExpanded(row.label + '|' + row.country)) {
+                    @for (sub of row.subRows; track sub.rawKey) {
+                      <tr class="hl-sub-row"
+                          [class.hl-row-expandable]="sub.countryRows.length > 0"
+                          (click)="sub.countryRows.length > 0 && toggleExpSubRow(row.label + '|' + row.country + '|' + sub.rawKey, $event)">
+                        <td class="rank">
+                          @if (sub.countryRows.length > 0) {
+                            <span class="hl-expand-icon">{{ isExpSubRowExpanded(row.label + '|' + row.country + '|' + sub.rawKey) ? '&#9660;' : '&#9654;' }}</span>
+                          }
+                        </td>
+                        <td class="hl-sub-commodity" [title]="sub.rawKey">&#8627; {{ sub.rawKey }}</td>
+                        <td>{{ sub.country }}</td>
+                        <td class="num">{{ sub.prevUsd.toFixed(3) }}</td>
+                        <td class="num">{{ sub.toUsd.toFixed(3) }}</td>
+                        <td class="num">
+                          @if (sub.pct !== null) {
+                            <span [class.pos]="sub.pct > 0" [class.neg]="sub.pct < 0">
+                              {{ sub.pct > 0 ? '+' : '' }}{{ sub.pct }}%
+                            </span>
+                          } @else {
+                            <span class="hl-na">N/A</span>
+                          }
+                        </td>
+                      </tr>
+                      @if (isExpSubRowExpanded(row.label + '|' + row.country + '|' + sub.rawKey)) {
+                        @for (cr of sub.countryRows; track cr.country) {
+                          <tr class="hl-sub-sub-row">
+                            <td class="rank"></td>
+                            <td class="hl-sub-sub-commodity" [title]="cr.country">&#8627;&#8627; {{ cr.country }}</td>
+                            <td>{{ cr.country }}</td>
+                            <td class="num">{{ cr.prevUsd.toFixed(3) }}</td>
+                            <td class="num">{{ cr.toUsd.toFixed(3) }}</td>
+                            <td class="num">
+                              @if (cr.pct !== null) {
+                                <span [class.pos]="cr.pct > 0" [class.neg]="cr.pct < 0">
+                                  {{ cr.pct > 0 ? '+' : '' }}{{ cr.pct }}%
+                                </span>
+                              } @else {
+                                <span class="hl-na">N/A</span>
+                              }
+                            </td>
+                          </tr>
+                        }
+                      }
+                    }
+                  }
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+
+    </section>
+
+  </div><!-- /hl-columns -->
+
+</div>

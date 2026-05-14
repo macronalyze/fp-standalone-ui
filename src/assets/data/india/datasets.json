@@ -18,11 +18,29 @@
     {
       "id": "iip",
       "name": "Index of Industrial Production",
-      "shortName": "IIP",
+      "shortName": "IIP Item Charts",
       "icon": "precision_manufacturing",
-      "latestPeriod": "Coming soon",
+      "latestPeriod": "Mar 2026",
       "latestGrowth": null,
-      "status": "coming-soon"
+      "status": "available"
+    },
+    {
+      "id": "stock-comparison",
+      "name": "Stock Market Comparison",
+      "shortName": "Stock Comparison",
+      "icon": "show_chart",
+      "latestPeriod": "Live",
+      "latestGrowth": null,
+      "status": "available"
+    },
+    {
+      "id": "hl-analysis",
+      "name": "Import & Export – High Level Analysis",
+      "shortName": "Trade HL Analysis",
+      "icon": "analytics",
+      "latestPeriod": "Feb 2026",
+      "latestGrowth": null,
+      "status": "available"
     },
     {
       "id": "import-export",

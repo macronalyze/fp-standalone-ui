@@ -1,0 +1,173 @@
+<div class="sc-page">
+
+  <!-- ── Header ─────────────────────────────────────────────────────── -->
+  <div class="page-header">
+    <a [routerLink]="['/country', country, 'datasets']" class="back-btn">&#8592; Datasets</a>
+    <h1>Stock Comparison</h1>
+    <p class="subtitle">Compare normalised % growth of multiple stocks over a selected time range</p>
+  </div>
+
+  <!-- ── Search panel ───────────────────────────────────────────────── -->
+  <div class="sc-search-panel">
+    <div class="sc-search-row">
+      <input
+        type="text"
+        class="sc-search-input"
+        placeholder="Type 2+ characters to search (e.g. TA, Infosys, TATA)…"
+        [ngModel]="searchQuery()"
+        (ngModelChange)="onSearchInput($event)"
+        autocomplete="off"
+      />
+      @if (searchLoading()) {
+        <span class="sc-spinner"></span>
+      }
+    </div>
+
+    @if (addError()) {
+      <p class="sc-error">{{ addError() }}</p>
+    }
+
+    @if (searchError()) {
+      <p class="sc-error">{{ searchError() }}</p>
+    }
+
+    @if (loadingIsins().size > 0) {
+      <p class="sc-loading-note">&#8987; Loading stock data…</p>
+    }
+
+    @if (searchQuery().trim().length > 0 && !searchLoading()) {
+      <div class="sc-results">
+        @if (searchResults().length === 0) {
+          <p class="sc-no-results">No matching tickers found.</p>
+        } @else {
+          @for (result of searchResults(); track result.isin) {
+            <div
+              class="sc-result-row"
+              [class.already-added]="isAdded(result.isin)"
+              [class.is-loading]="isLoading(result.isin)"
+              (click)="addStock(result)"
+            >
+              <span class="sc-result-ticker">{{ result.nse_symbol }}</span>
+              <span class="sc-result-meta">
+                <span class="sc-result-name">{{ result.name }}</span>
+                <span class="sc-result-sep">·</span>
+                <span class="sc-result-bse">BSE {{ result.bse_code }}</span>
+              </span>
+              @if (isLoading(result.isin)) {
+                <span class="sc-badge-loading">&#8987; Loading…</span>
+              } @else if (isAdded(result.isin)) {
+                <span class="sc-badge-added">&#10003; Added</span>
+              } @else {
+                <span class="sc-badge-add">+ Add</span>
+              }
+            </div>
+          }
+        }
+      </div>
+    }
+  </div>
+
+  <!-- ── Added tickers chips ────────────────────────────────────────── -->
+  @if (addedStocks().length > 0) {
+    <div class="sc-chips-row">
+      @for (stock of addedStocks(); track stock.isin) {
+        <span class="sc-chip" [style.border-color]="tickerColor(stock.isin)">
+          <span class="sc-chip-dot" [style.background]="tickerColor(stock.isin)"></span>
+          {{ stock.symbol }}
+          <button type="button" class="sc-chip-remove" (click)="removeStock(stock.isin)">&#215;</button>
+        </span>
+      }
+      <button type="button" class="sc-clear-all" (click)="clearAll()">Clear all</button>
+    </div>
+  }
+
+  <!-- ── Chart + range selector + table ────────────────────────────── -->
+  @if (addedStocks().length > 0) {
+
+    <!-- Range selector -->
+    <div class="sc-range-bar">
+      @for (opt of rangeOptions; track opt.key) {
+        <button
+          type="button"
+          class="sc-range-btn"
+          [class.active]="selectedRange() === opt.key"
+          (click)="setRange(opt.key)">
+          {{ opt.label }}
+        </button>
+      }
+    </div>
+
+    <!-- Line chart -->
+    <div class="sc-chart-card">
+      @if (!hasChartData()) {
+        <p class="sc-chart-empty">No data available for the selected tickers in this range.</p>
+      } @else {
+        <canvas baseChart
+          [data]="lineChartData()"
+          [options]="lineChartOptions"
+          type="line">
+        </canvas>
+      }
+    </div>
+
+    <!-- Summary table -->
+    <div class="sc-table-wrapper">
+      <h2 class="sc-table-title">Summary — {{ activeRangeLabel() }}</h2>
+      <table class="sc-table">
+        <thead>
+          <tr>
+            <th>Ticker</th>
+            <th>Company</th>
+            <th class="num">Last Close (&#8377;)</th>
+            <th class="num">Change (&#8377;)</th>
+            <th class="num">% Change (range)</th>
+            <th>Range</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (row of summaryRows(); track row.isin) {
+            <tr>
+              <td>
+                <span class="table-dot" [style.background]="row.color"></span>
+                {{ row.symbol }}
+              </td>
+              <td class="sc-company-name">{{ row.name }}</td>
+              @if (row.noData) {
+                <td colspan="4" class="sc-no-data">No data in selected range</td>
+              } @else {
+                <td class="num">{{ row.lastClose }}</td>
+                <td class="num" [class.pos]="row.change !== null && row.change > 0" [class.neg]="row.change !== null && row.change < 0">
+                  @if (row.change !== null) {
+                    {{ row.change > 0 ? '+' : '' }}{{ row.change }}
+                  } @else {
+                    N/A
+                  }
+                </td>
+                <td class="num" [class.pos]="row.pctChange !== null && row.pctChange > 0" [class.neg]="row.pctChange !== null && row.pctChange < 0">
+                  @if (row.pctChange !== null) {
+                    <span class="tbl-arrow">{{ row.pctChange > 0 ? '&#9650;' : '&#9660;' }}</span>
+                    {{ row.pctChange > 0 ? '+' : '' }}{{ row.pctChange }}%
+                  } @else {
+                    N/A
+                  }
+                </td>
+                <td class="sc-range-dates">{{ row.firstDate }} &#8594; {{ row.lastDate }}</td>
+              }
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+  } @else {
+
+    <!-- Empty state -->
+    <div class="sc-empty-state">
+      <div class="sc-empty-icon">&#128200;</div>
+      <p class="sc-empty-title">No stocks added yet</p>
+      <p class="sc-empty-sub">Search for a company or ticker above and click "+ Add" to start comparing.</p>
+    </div>
+
+  }
+
+</div>
