@@ -65,7 +65,7 @@ const COLORS = [
   '#b07aa1', '#ff9da7', '#9c755f', '#bab0ac', '#edc948',
 ];
 
-const API_BASE = '/fp/api/v1';
+const API_BASE = 'https://fp-backend-1688.onrender.com/fp/api/v1';
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 
