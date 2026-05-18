@@ -47,7 +47,7 @@ interface AddedStock {
 
 // ── Constants ───────────────────────────────────────────────────────────────
 
-export type RangeKey = '7d' | '15d' | '21d' | '1m' | '2m' | '3m' | '6m' | '1y';
+export type RangeKey = '7d' | '15d' | '21d' | '1m' | '2m' | '3m' | '6m' | '1y' | 'custom';
 
 export const RANGE_OPTIONS: { key: RangeKey; label: string; days: number }[] = [
   { key: '7d',  label: '7 Day',   days: 7   },
@@ -58,6 +58,7 @@ export const RANGE_OPTIONS: { key: RangeKey; label: string; days: number }[] = [
   { key: '3m',  label: '3 Month', days: 90  },
   { key: '6m',  label: '6 Month', days: 180 },
   { key: '1y',  label: '1 Year',  days: 365 },
+  { key: 'custom', label: 'Custom', days: 0 },
 ];
 
 const COLORS = [
@@ -73,8 +74,13 @@ function toDateStr(d: Date): string {
   return d.toISOString().split('T')[0];
 }
 
-function filterByRange(data: ApiDataPoint[], days: number): ApiDataPoint[] {
+function filterByRange(data: ApiDataPoint[], days: number, customFrom?: string, customTo?: string): ApiDataPoint[] {
   if (data.length === 0) return [];
+  if (customFrom && customTo) {
+    const from = new Date(customFrom);
+    const to = new Date(customTo);
+    return data.filter(d => { const dt = new Date(d.date); return dt >= from && dt <= to; });
+  }
   const latest = new Date(data[data.length - 1].date);
   const cutoff = new Date(latest);
   cutoff.setDate(cutoff.getDate() - days);
@@ -115,8 +121,23 @@ export class StockComparisonComponent {
   addedStocks  = signal<AddedStock[]>([]);
   loadingIsins = signal<Set<string>>(new Set());
 
-  selectedRange = signal<RangeKey>('7d');
-  addError      = signal<string>('');
+  selectedRange   = signal<RangeKey>('7d');
+  chartMode        = signal<'line' | 'area'>('line');
+  customFrom       = signal<string>('');
+  customEndMode    = signal<'days' | 'date'>('days');
+  customDaysOffset = signal<number>(7);
+  customToDate     = signal<string>('');
+  showDatePicker   = signal<boolean>(false);
+  addError         = signal<string>('');
+
+  readonly customTo = computed(() => {
+    if (this.customEndMode() === 'date') return this.customToDate();
+    const from = this.customFrom();
+    if (!from) return '';
+    const d = new Date(from);
+    d.setDate(d.getDate() + this.customDaysOffset());
+    return toDateStr(d);
+  });
 
   private errorTimer:     ReturnType<typeof setTimeout> | null = null;
   private searchDebounce: ReturnType<typeof setTimeout> | null = null;
@@ -134,9 +155,12 @@ export class StockComparisonComponent {
   readonly tickerDatasets = computed(() => {
     const days   = this.rangeDays();
     const colors = this.colorMap();
+    const isCustom = this.selectedRange() === 'custom';
+    const from = isCustom ? this.customFrom() : undefined;
+    const to   = isCustom ? this.customTo() : undefined;
     return this.addedStocks().map(stock => {
       const color    = colors.get(stock.isin) ?? COLORS[0];
-      const filtered = filterByRange(stock.data, days);
+      const filtered = filterByRange(stock.data, days, from, to);
       const base     = filtered.length > 0 ? filtered[0].close : null;
       const points   = base != null && base !== 0
         ? filtered.map(d => ({
@@ -157,17 +181,21 @@ export class StockComparisonComponent {
 
   readonly lineChartData = computed<ChartConfiguration<'line'>['data']>(() => {
     const dates    = this.unionDates();
-    const days     = this.rangeDays();
+    let days = this.rangeDays();
+    if (days === 0 && dates.length >= 2) {
+      days = Math.round((new Date(dates[dates.length - 1]).getTime() - new Date(dates[0]).getTime()) / 86400000);
+    }
     const datasets = this.tickerDatasets().map(ds => {
-      const pctMap = new Map(ds.points.map(p => [p.date, p.pct]));
+      const closeMap = new Map(ds.points.map(p => [p.date, p.close]));
+      const isArea = this.chartMode() === 'area';
       return {
         label:           ds.symbol,
-        data:            dates.map(d => pctMap.has(d) ? pctMap.get(d)! : null),
+        data:            dates.map(d => closeMap.has(d) ? closeMap.get(d)! : null),
         borderColor:     ds.color,
-        backgroundColor: ds.color + '22',
+        backgroundColor: ds.color + (isArea ? '44' : '22'),
         tension:         0.3,
-        fill:            false,
-        pointRadius:     4,
+        fill:            isArea,
+        pointRadius:     isArea ? 2 : 4,
         spanGaps:        true,
       };
     });
@@ -179,25 +207,31 @@ export class StockComparisonComponent {
 
   readonly lineChartOptions: ChartOptions<'line'> = {
     responsive: true,
-    interaction: { mode: 'nearest', intersect: true },
+    interaction: { mode: 'index', intersect: false },
     plugins: {
       legend: { display: true, position: 'top' },
-      title:  { display: true, text: 'Stock % Growth Comparison (Base = first day of range -> 0%)' },
+      title:  { display: true, text: 'Stock Price Comparison' },
       tooltip: {
         callbacks: {
           label: ctx => {
             const v = ctx.parsed.y;
+            const pct = this.pctChangeData()[ctx.datasetIndex]?.[ctx.dataIndex];
+            const pctStr = pct != null ? ` | ${pct >= 0 ? '+' : ''}${pct}%` : '';
             return v != null
-              ? `${ctx.dataset.label}: ${v >= 0 ? '+' : ''}${v}%`
+              ? `${ctx.dataset.label}: \u20B9${v.toLocaleString('en-IN')}${pctStr}`
               : `${ctx.dataset.label}: N/A`;
           },
+          labelColor: ctx => ({
+            borderColor: ctx.dataset.borderColor as string,
+            backgroundColor: ctx.dataset.borderColor as string,
+          }),
         },
       },
     },
     scales: {
       y: {
-        title: { display: true, text: '% Growth' },
-        ticks: { callback: v => `${v}%` },
+        title: { display: true, text: 'Price (\u20B9)' },
+        ticks: { callback: v => `\u20B9${v}` },
       },
       x: {
         title: { display: true, text: 'Date' },
@@ -209,9 +243,12 @@ export class StockComparisonComponent {
   readonly summaryRows = computed(() => {
     const days   = this.rangeDays();
     const colors = this.colorMap();
+    const isCustom = this.selectedRange() === 'custom';
+    const from = isCustom ? this.customFrom() : undefined;
+    const to   = isCustom ? this.customTo() : undefined;
     return this.addedStocks().map(stock => {
       const color    = colors.get(stock.isin) ?? COLORS[0];
-      const filtered = filterByRange(stock.data, days);
+      const filtered = filterByRange(stock.data, days, from, to);
       if (filtered.length === 0) {
         return { isin: stock.isin, symbol: stock.symbol, name: stock.name, color, noData: true, lastClose: null, change: null, pctChange: null, lastDate: null, firstDate: null };
       }
@@ -227,6 +264,14 @@ export class StockComparisonComponent {
       if (a.pctChange === null) return 1;
       if (b.pctChange === null) return -1;
       return b.pctChange - a.pctChange;
+    });
+  });
+
+  readonly pctChangeData = computed(() => {
+    const dates = this.unionDates();
+    return this.tickerDatasets().map(ds => {
+      const pctMap = new Map(ds.points.map(p => [p.date, p.pct]));
+      return dates.map(d => pctMap.get(d) ?? null);
     });
   });
 
@@ -310,7 +355,15 @@ export class StockComparisonComponent {
   }
 
   setRange(key: RangeKey): void {
-    this.selectedRange.set(key);
+    if (key === 'custom') {
+      this.showDatePicker.update(v => !v);
+      if (this.selectedRange() !== 'custom') {
+        this.selectedRange.set(key);
+      }
+    } else {
+      this.selectedRange.set(key);
+      this.showDatePicker.set(false);
+    }
   }
 
   isAdded(isin: string): boolean {
@@ -326,6 +379,9 @@ export class StockComparisonComponent {
   }
 
   activeRangeLabel(): string {
+    if (this.selectedRange() === 'custom' && this.customFrom() && this.customTo()) {
+      return `${this.customFrom()} to ${this.customTo()}`;
+    }
     return RANGE_OPTIONS.find(r => r.key === this.selectedRange())?.label ?? '';
   }
 

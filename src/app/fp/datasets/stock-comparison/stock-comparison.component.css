@@ -247,7 +247,94 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+  align-items: center;
   margin-bottom: 0.5rem;
+}
+
+.sc-chart-toggle {
+  margin-left: auto;
+  display: flex;
+  gap: 0.3rem;
+}
+
+/* ── Custom date picker ──────────────────────────────────────────────── */
+.sc-date-picker {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+}
+
+.sc-date-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sc-date-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.sc-date-input {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  border: 1px solid #c8d0da;
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.sc-date-input:focus {
+  border-color: #4e79a7;
+}
+
+.sc-days-input {
+  width: 70px;
+}
+
+.sc-date-mode-toggle {
+  display: flex;
+  gap: 0.25rem;
+  align-self: flex-end;
+}
+
+.sc-mode-btn {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  border: 1px solid #c8d0da;
+  border-radius: 4px;
+  background: #fff;
+  color: #555;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.sc-mode-btn:hover {
+  border-color: #4e79a7;
+  color: #4e79a7;
+}
+
+.sc-mode-btn.active {
+  background: #4e79a7;
+  border-color: #4e79a7;
+  color: #fff;
+}
+
+.sc-date-summary {
+  align-self: flex-end;
+  font-size: 0.8rem;
+  color: #4e79a7;
+  font-weight: 600;
+  padding-bottom: 0.4rem;
 }
 
 .sc-range-btn {

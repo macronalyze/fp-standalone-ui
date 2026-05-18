@@ -95,7 +95,59 @@
           {{ opt.label }}
         </button>
       }
+
+      <span class="sc-chart-toggle">
+        <button type="button" class="sc-range-btn" [class.active]="chartMode() === 'line'" (click)="chartMode.set('line')">Line</button>
+        <button type="button" class="sc-range-btn" [class.active]="chartMode() === 'area'" (click)="chartMode.set('area')">Area</button>
+      </span>
     </div>
+
+    <!-- Custom date picker -->
+    @if (showDatePicker()) {
+      <div class="sc-date-picker">
+        <div class="sc-date-field">
+          <label class="sc-date-label">From</label>
+          <input
+            type="date"
+            class="sc-date-input"
+            [ngModel]="customFrom()"
+            (ngModelChange)="customFrom.set($event)"
+          />
+        </div>
+
+        <div class="sc-date-mode-toggle">
+          <button type="button" class="sc-mode-btn" [class.active]="customEndMode() === 'days'" (click)="customEndMode.set('days')">+ Days</button>
+          <button type="button" class="sc-mode-btn" [class.active]="customEndMode() === 'date'" (click)="customEndMode.set('date')">To Date</button>
+        </div>
+
+        @if (customEndMode() === 'days') {
+          <div class="sc-date-field">
+            <label class="sc-date-label">+ Days</label>
+            <input
+              type="number"
+              class="sc-date-input sc-days-input"
+              min="1"
+              [ngModel]="customDaysOffset()"
+              (ngModelChange)="customDaysOffset.set($event)"
+            />
+          </div>
+        } @else {
+          <div class="sc-date-field">
+            <label class="sc-date-label">To</label>
+            <input
+              type="date"
+              class="sc-date-input"
+              [ngModel]="customToDate()"
+              (ngModelChange)="customToDate.set($event)"
+            />
+          </div>
+        }
+
+        @if (customTo()) {
+          <span class="sc-date-summary">{{ customFrom() }} &rarr; {{ customTo() }}</span>
+        }
+      </div>
+    }
 
     <!-- Line chart -->
     <div class="sc-chart-card">
