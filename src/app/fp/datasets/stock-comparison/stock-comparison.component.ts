@@ -122,6 +122,7 @@ export class StockComparisonComponent {
   loadingIsins = signal<Set<string>>(new Set());
 
   selectedRange   = signal<RangeKey>('7d');
+  compareMode      = signal<'price' | 'growth'>('price');
   chartMode        = signal<'line' | 'area'>('line');
   customFrom       = signal<string>('');
   customEndMode    = signal<'days' | 'date'>('days');
@@ -195,7 +196,34 @@ export class StockComparisonComponent {
         backgroundColor: ds.color + (isArea ? '44' : '22'),
         tension:         0.3,
         fill:            isArea,
-        pointRadius:     isArea ? 2 : 4,
+        pointRadius:     1,
+        pointHoverRadius: 5,
+        spanGaps:        true,
+      };
+    });
+    return {
+      labels: dates.map(d => fmtLabel(d, days)),
+      datasets,
+    };
+  });
+
+  readonly growthChartData = computed<ChartConfiguration<'line'>['data']>(() => {
+    const dates = this.unionDates();
+    let days = this.rangeDays();
+    if (days === 0 && dates.length >= 2) {
+      days = Math.round((new Date(dates[dates.length - 1]).getTime() - new Date(dates[0]).getTime()) / 86400000);
+    }
+    const datasets = this.tickerDatasets().map(ds => {
+      const pctMap = new Map(ds.points.map(p => [p.date, p.pct]));
+      return {
+        label:           ds.symbol,
+        data:            dates.map(d => pctMap.get(d) ?? null),
+        borderColor:     ds.color,
+        backgroundColor: ds.color + '22',
+        tension:         0.3,
+        fill:            false,
+        pointRadius:     1,
+        pointHoverRadius: 5,
         spanGaps:        true,
       };
     });
@@ -213,6 +241,14 @@ export class StockComparisonComponent {
       title:  { display: true, text: 'Stock Price Comparison' },
       tooltip: {
         callbacks: {
+          title: (items) => {
+            const idx = items[0]?.dataIndex;
+            const dates = this.unionDates();
+            if (idx != null && dates[idx]) {
+              return new Date(dates[idx]).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+            }
+            return '';
+          },
           label: ctx => {
             const v = ctx.parsed.y;
             const pct = this.pctChangeData()[ctx.datasetIndex]?.[ctx.dataIndex];
@@ -239,6 +275,63 @@ export class StockComparisonComponent {
       },
     },
   };
+
+  readonly growthChartOptions = computed<ChartOptions<'line'>>(() => {
+    const allPcts = this.tickerDatasets().flatMap(ds => ds.points.map(p => p.pct));
+    const maxAbs = allPcts.length > 0 ? Math.ceil(Math.max(...allPcts.map(Math.abs))) : 10;
+    const bound = Math.max(maxAbs, 1);
+    return {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, position: 'top' },
+        title:  { display: true, text: 'Growth % Comparison' },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              const idx = items[0]?.dataIndex;
+              const dates = this.unionDates();
+              if (idx != null && dates[idx]) {
+                return new Date(dates[idx]).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+              }
+              return '';
+            },
+            label: ctx => {
+              const pct = ctx.parsed.y;
+              const dates = this.unionDates();
+              const ds = this.tickerDatasets()[ctx.datasetIndex];
+              const date = dates[ctx.dataIndex];
+              const point = ds?.points.find(p => p.date === date);
+              const priceStr = point ? ` | \u20B9${point.close.toLocaleString('en-IN')}` : '';
+              return pct != null
+                ? `${ctx.dataset.label}: ${pct >= 0 ? '+' : ''}${pct}%${priceStr}`
+                : `${ctx.dataset.label}: N/A`;
+            },
+            labelColor: ctx => ({
+              borderColor: ctx.dataset.borderColor as string,
+              backgroundColor: ctx.dataset.borderColor as string,
+            }),
+          },
+        },
+      },
+      scales: {
+        y: {
+          min: -bound,
+          max: bound,
+          title: { display: true, text: 'Growth (%)' },
+          ticks: { callback: v => `${v}%` },
+          grid: {
+            color: (ctx) => ctx.tick.value === 0 ? '#888' : '#e0e0e0',
+            lineWidth: (ctx) => ctx.tick.value === 0 ? 2 : 1,
+          },
+        },
+        x: {
+          title: { display: true, text: 'Date' },
+          ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 12 },
+        },
+      },
+    };
+  });
 
   readonly summaryRows = computed(() => {
     const days   = this.rangeDays();

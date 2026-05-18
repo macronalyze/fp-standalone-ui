@@ -97,9 +97,16 @@
       }
 
       <span class="sc-chart-toggle">
-        <button type="button" class="sc-range-btn" [class.active]="chartMode() === 'line'" (click)="chartMode.set('line')">Line</button>
-        <button type="button" class="sc-range-btn" [class.active]="chartMode() === 'area'" (click)="chartMode.set('area')">Area</button>
+        <button type="button" class="sc-range-btn" [class.active]="compareMode() === 'price'" (click)="compareMode.set('price')">Price</button>
+        <button type="button" class="sc-range-btn" [class.active]="compareMode() === 'growth'" (click)="compareMode.set('growth')">Growth</button>
       </span>
+
+      @if (compareMode() === 'price') {
+        <span class="sc-chart-toggle">
+          <button type="button" class="sc-range-btn" [class.active]="chartMode() === 'line'" (click)="chartMode.set('line')">Line</button>
+          <button type="button" class="sc-range-btn" [class.active]="chartMode() === 'area'" (click)="chartMode.set('area')">Area</button>
+        </span>
+      }
     </div>
 
     <!-- Custom date picker -->
@@ -149,10 +156,16 @@
       </div>
     }
 
-    <!-- Line chart -->
+    <!-- Chart -->
     <div class="sc-chart-card">
       @if (!hasChartData()) {
         <p class="sc-chart-empty">No data available for the selected tickers in this range.</p>
+      } @else if (compareMode() === 'growth') {
+        <canvas baseChart
+          [data]="growthChartData()"
+          [options]="growthChartOptions()"
+          type="line">
+        </canvas>
       } @else {
         <canvas baseChart
           [data]="lineChartData()"
