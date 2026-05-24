@@ -13,9 +13,9 @@ import { NavbarComponent } from './components/navbar/navbar.component';
     </main>
   `,
   styles: [`
-    main {
-      min-height: calc(100vh - 64px);
-    }
+    // main {
+    //   min-height: calc(100vh - 64px);
+    // }
   `]
 })
 export class AppComponent {}
