@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { ChartConfiguration, ChartOptions } from 'chart.js';
 import { NgChartsModule } from 'ng2-charts';
+import { environment } from '../../../../environments/environment';
 
 // ── API interfaces ──────────────────────────────────────────────────────────
 
@@ -50,14 +51,14 @@ interface AddedStock {
 export type RangeKey = '7d' | '15d' | '21d' | '1m' | '2m' | '3m' | '6m' | '1y' | 'custom';
 
 export const RANGE_OPTIONS: { key: RangeKey; label: string; days: number }[] = [
-  { key: '7d',  label: '7 Day',   days: 7   },
-  { key: '15d', label: '15 Day',  days: 15  },
-  { key: '21d', label: '21 Day',  days: 21  },
-  { key: '1m',  label: '1 Month', days: 30  },
-  { key: '2m',  label: '2 Month', days: 60  },
-  { key: '3m',  label: '3 Month', days: 90  },
-  { key: '6m',  label: '6 Month', days: 180 },
-  { key: '1y',  label: '1 Year',  days: 365 },
+  { key: '7d',  label: '7D',   days: 7   },
+  { key: '15d', label: '15D',  days: 15  },
+  { key: '21d', label: '21D',  days: 21  },
+  { key: '1m',  label: '1M', days: 30  },
+  { key: '2m',  label: '2M', days: 60  },
+  { key: '3m',  label: '3M', days: 90  },
+  { key: '6m',  label: '6M', days: 180 },
+  { key: '1y',  label: '1Y',  days: 365 },
   { key: 'custom', label: 'Custom', days: 0 },
 ];
 
@@ -66,7 +67,7 @@ const COLORS = [
   '#b07aa1', '#ff9da7', '#9c755f', '#bab0ac', '#edc948',
 ];
 
-const API_BASE = 'https://fp-backend-eu.onrender.com/fp/api/v1';
+const API_BASE = environment.apiUrl;
 
 // ── Utilities ────────────────────────────────────────────────────────────────
 
@@ -124,6 +125,7 @@ export class StockComparisonComponent {
   selectedRange   = signal<RangeKey>('7d');
   compareMode      = signal<'price' | 'growth'>('price');
   chartMode        = signal<'line' | 'area'>('line');
+  xAxisIntervalDays = signal<number>(1);
   customFrom       = signal<string>('');
   customEndMode    = signal<'days' | 'date'>('days');
   customDaysOffset = signal<number>(7);
@@ -180,8 +182,30 @@ export class StockComparisonComponent {
     return [...all].sort();
   });
 
+  private readonly sampledDates = computed<string[]>(() => {
+    const dates = this.unionDates();
+    const intervalDays = Math.max(1, Math.floor(Number(this.xAxisIntervalDays()) || 1));
+
+    if (intervalDays <= 1 || dates.length <= 1) {
+      return dates;
+    }
+
+    const sampled: string[] = [];
+    let lastIncludedTime: number | null = null;
+
+    for (const date of dates) {
+      const currentTime = new Date(date).getTime();
+      if (lastIncludedTime === null || currentTime - lastIncludedTime >= intervalDays * 86400000) {
+        sampled.push(date);
+        lastIncludedTime = currentTime;
+      }
+    }
+
+    return sampled;
+  });
+
   readonly lineChartData = computed<ChartConfiguration<'line'>['data']>(() => {
-    const dates    = this.unionDates();
+    const dates    = this.sampledDates();
     let days = this.rangeDays();
     if (days === 0 && dates.length >= 2) {
       days = Math.round((new Date(dates[dates.length - 1]).getTime() - new Date(dates[0]).getTime()) / 86400000);
@@ -208,7 +232,7 @@ export class StockComparisonComponent {
   });
 
   readonly growthChartData = computed<ChartConfiguration<'line'>['data']>(() => {
-    const dates = this.unionDates();
+    const dates = this.sampledDates();
     let days = this.rangeDays();
     if (days === 0 && dates.length >= 2) {
       days = Math.round((new Date(dates[dates.length - 1]).getTime() - new Date(dates[0]).getTime()) / 86400000);
@@ -243,7 +267,7 @@ export class StockComparisonComponent {
         callbacks: {
           title: (items) => {
             const idx = items[0]?.dataIndex;
-            const dates = this.unionDates();
+            const dates = this.sampledDates();
             if (idx != null && dates[idx]) {
               return new Date(dates[idx]).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
             }
@@ -290,7 +314,7 @@ export class StockComparisonComponent {
           callbacks: {
             title: (items) => {
               const idx = items[0]?.dataIndex;
-              const dates = this.unionDates();
+                const dates = this.sampledDates();
               if (idx != null && dates[idx]) {
                 return new Date(dates[idx]).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
               }
@@ -298,7 +322,7 @@ export class StockComparisonComponent {
             },
             label: ctx => {
               const pct = ctx.parsed.y;
-              const dates = this.unionDates();
+                const dates = this.sampledDates();
               const ds = this.tickerDatasets()[ctx.datasetIndex];
               const date = dates[ctx.dataIndex];
               const point = ds?.points.find(p => p.date === date);
@@ -361,7 +385,7 @@ export class StockComparisonComponent {
   });
 
   readonly pctChangeData = computed(() => {
-    const dates = this.unionDates();
+    const dates = this.sampledDates();
     return this.tickerDatasets().map(ds => {
       const pctMap = new Map(ds.points.map(p => [p.date, p.pct]));
       return dates.map(d => pctMap.get(d) ?? null);
@@ -476,6 +500,11 @@ export class StockComparisonComponent {
       return `${this.customFrom()} to ${this.customTo()}`;
     }
     return RANGE_OPTIONS.find(r => r.key === this.selectedRange())?.label ?? '';
+  }
+
+  onXAxisIntervalChange(value: string | number): void {
+    const parsed = Math.max(1, Math.floor(Number(value) || 1));
+    this.xAxisIntervalDays.set(parsed);
   }
 
   private showError(msg: string): void {

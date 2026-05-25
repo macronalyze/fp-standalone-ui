@@ -96,6 +96,18 @@
         </button>
       }
 
+      <label class="sc-axis-interval">
+        <span class="sc-axis-interval-label">X-axis every</span>
+        <input
+          type="number"
+          min="1"
+          class="sc-date-input sc-axis-interval-input"
+          [ngModel]="xAxisIntervalDays()"
+          (ngModelChange)="onXAxisIntervalChange($event)"
+        />
+        <span class="sc-axis-interval-suffix">day(s)</span>
+      </label>
+
       <span class="sc-chart-toggle">
         <button type="button" class="sc-range-btn" [class.active]="compareMode() === 'price'" (click)="compareMode.set('price')">Price</button>
         <button type="button" class="sc-range-btn" [class.active]="compareMode() === 'growth'" (click)="compareMode.set('growth')">Growth</button>

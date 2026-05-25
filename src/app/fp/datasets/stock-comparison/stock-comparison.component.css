@@ -251,10 +251,31 @@
   margin-bottom: 0.5rem;
 }
 
+.sc-axis-interval {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 20px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.sc-axis-interval-input {
+  width: 56px;
+  text-align: center;
+}
+
 .sc-chart-toggle {
   margin-left: auto;
   display: flex;
   gap: 0.3rem;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 0.5rem;
 }
 
 /* ── Custom date picker ──────────────────────────────────────────────── */
