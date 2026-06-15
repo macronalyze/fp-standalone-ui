@@ -1,4 +1,4 @@
-import { Component, Input, computed, signal, inject } from '@angular/core';
+import { Component, Input, computed, effect, signal, inject } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -44,6 +44,22 @@ interface AddedStock {
   symbol: string;
   name: string;
   data: ApiDataPoint[];
+  mcap?: McapDataPoint[];
+  mcapLoaded?: boolean;
+}
+
+interface McapDataPoint {
+  date: string;
+  face_value: number | null;
+  issue_size: number | null;
+  market_cap: number | null;
+}
+
+interface McapApiResponse {
+  isin: string;
+  source: string;
+  count: number;
+  data: McapDataPoint[];
 }
 
 // ── Constants ───────────────────────────────────────────────────────────────
@@ -82,10 +98,16 @@ function filterByRange(data: ApiDataPoint[], days: number, customFrom?: string, 
     const to = new Date(customTo);
     return data.filter(d => { const dt = new Date(d.date); return dt >= from && dt <= to; });
   }
-  const latest = new Date(data[data.length - 1].date);
-  const cutoff = new Date(latest);
+  // Predefined ranges (7D / 21D / 1M / ...) are anchored to today's date
+  // so price and mcap series always share the same window, regardless of
+  // when the most recent data point was ingested.
+  const today = new Date();
+  const cutoff = new Date(today);
   cutoff.setDate(cutoff.getDate() - days);
-  return data.filter(d => new Date(d.date) >= cutoff);
+  return data.filter(d => {
+    const dt = new Date(d.date);
+    return dt >= cutoff && dt <= today;
+  });
 }
 
 function fmtLabel(dateStr: string, days: number): string {
@@ -94,6 +116,20 @@ function fmtLabel(dateStr: string, days: number): string {
     return d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
   }
   return d.toLocaleDateString('en-IN', { month: 'short', year: 'numeric' });
+}
+
+function mergeByDate(a: ApiDataPoint[], b: ApiDataPoint[]): ApiDataPoint[] {
+  const map = new Map<string, ApiDataPoint>();
+  for (const p of a) map.set(p.date, p);
+  for (const p of b) map.set(p.date, p);
+  return [...map.values()].sort((x, y) => x.date.localeCompare(y.date));
+}
+
+function mergeMcapByDate(a: McapDataPoint[], b: McapDataPoint[]): McapDataPoint[] {
+  const map = new Map<string, McapDataPoint>();
+  for (const p of a) map.set(p.date, p);
+  for (const p of b) map.set(p.date, p);
+  return [...map.values()].sort((x, y) => x.date.localeCompare(y.date));
 }
 
 // ── Component ────────────────────────────────────────────────────────────────
@@ -121,6 +157,8 @@ export class StockComparisonComponent {
 
   addedStocks  = signal<AddedStock[]>([]);
   loadingIsins = signal<Set<string>>(new Set());
+  loadingMcapIsins = signal<Set<string>>(new Set());
+  showMarketCap = signal<boolean>(false);
 
   selectedRange   = signal<RangeKey>('7d');
   compareMode      = signal<'price' | 'growth'>('price');
@@ -142,8 +180,61 @@ export class StockComparisonComponent {
     return toDateStr(d);
   });
 
-  private errorTimer:     ReturnType<typeof setTimeout> | null = null;
-  private searchDebounce: ReturnType<typeof setTimeout> | null = null;
+  private errorTimer:        ReturnType<typeof setTimeout> | null = null;
+  private searchDebounce:    ReturnType<typeof setTimeout> | null = null;
+  private customFetchTimer:  ReturnType<typeof setTimeout> | null = null;
+  private mcapFetchTimer:    ReturnType<typeof setTimeout> | null = null;
+
+  // Per-ISIN cache of already-fetched custom ranges ("from|to") to avoid duplicate calls.
+  private readonly customFetchedRanges = new Map<string, Set<string>>();
+  private readonly mcapFetchedRanges   = new Map<string, Set<string>>();
+
+  constructor() {
+    // When the user picks a custom date range, ensure each added stock has data
+    // covering it. The initial fetch in addStock() only loads the last 365 days,
+    // so custom ranges outside that window need an additional API call.
+    effect(() => {
+      if (this.selectedRange() !== 'custom') return;
+      const from = this.customFrom();
+      const to   = this.customTo();
+      // Touch addedStocks so the effect re-runs when stocks are added/removed
+      // while the custom range is active.
+      this.addedStocks();
+      if (!from || !to || from > to) return;
+
+      if (this.customFetchTimer) clearTimeout(this.customFetchTimer);
+      this.customFetchTimer = setTimeout(() => this.ensureCustomRangeData(from, to), 400);
+    });
+
+    // When the market-cap toggle is on and exactly one stock is added,
+    // ensure mcap data is loaded for the active range. Mirrors the price
+    // fetch pattern: initial 365-day window, plus on-demand for custom ranges
+    // outside that window. Writes are deferred via queueMicrotask to avoid
+    // NG0600 (no signal writes inside an effect).
+    effect(() => {
+      if (!this.showMarketCap()) return;
+      const stocks = this.addedStocks();
+      if (stocks.length !== 1) return;
+      const stock = stocks[0];
+
+      const isCustom = this.selectedRange() === 'custom';
+      const from = isCustom ? this.customFrom() : undefined;
+      const to   = isCustom ? this.customTo() : undefined;
+
+      // Initial fetch (last 365 days) the first time the toggle is on.
+      if (!stock.mcapLoaded) {
+        if (this.loadingMcapIsins().has(stock.isin)) return;
+        queueMicrotask(() => this.fetchMcap(stock.isin));
+        return;
+      }
+
+      // Custom range outside what we've fetched -> fetch additional.
+      if (isCustom && from && to && from <= to) {
+        if (this.mcapFetchTimer) clearTimeout(this.mcapFetchTimer);
+        this.mcapFetchTimer = setTimeout(() => this.fetchMcap(stock.isin, from, to), 400);
+      }
+    });
+  }
 
   // ── Derived computeds ───────────────────────────────────────────────
 
@@ -179,6 +270,11 @@ export class StockComparisonComponent {
   private readonly unionDates = computed<string[]>(() => {
     const all = new Set<string>();
     this.tickerDatasets().forEach(ds => ds.points.forEach(p => all.add(p.date)));
+    // When mcap is shown on a single stock, include mcap dates so bars are
+    // visible even on dates that have no price entry in the active range.
+    if (this.showMarketCap() && this.addedStocks().length === 1) {
+      this.mcapFiltered().forEach(p => all.add(p.date));
+    }
     return [...all].sort();
   });
 
@@ -210,7 +306,7 @@ export class StockComparisonComponent {
     if (days === 0 && dates.length >= 2) {
       days = Math.round((new Date(dates[dates.length - 1]).getTime() - new Date(dates[0]).getTime()) / 86400000);
     }
-    const datasets = this.tickerDatasets().map(ds => {
+    const datasets: ChartConfiguration<'line'>['data']['datasets'] = this.tickerDatasets().map(ds => {
       const closeMap = new Map(ds.points.map(p => [p.date, p.close]));
       const isArea = this.chartMode() === 'area';
       return {
@@ -223,8 +319,33 @@ export class StockComparisonComponent {
         pointRadius:     1,
         pointHoverRadius: 5,
         spanGaps:        true,
+        yAxisID:         this.canShowMcapChart() ? 'y1' : 'y',
+        order:           1,
       };
     });
+
+    // Inject a bar dataset for market cap when applicable. Mixed line/bar chart.
+    if (this.canShowMcapChart()) {
+      const stock = this.addedStocks()[0];
+      const { divisor, unit } = this.mcapScale();
+      const color = this.colorMap().get(stock.isin) ?? COLORS[0];
+      const mcapByDate = new Map(this.mcapFiltered().map(p => [p.date, p.market_cap ?? 0]));
+      const values = dates.map(d => {
+        const v = mcapByDate.get(d);
+        return v != null && v > 0 ? +(v / divisor).toFixed(2) : null;
+      });
+      datasets.push({
+        type:            'bar',
+        label:           `Market Cap (₹ ${unit})`,
+        data:            values,
+        backgroundColor: color + '55',
+        borderColor:     color + '99',
+        borderWidth:     1,
+        yAxisID:         'y',
+        order:           2,
+      } as any);
+    }
+
     return {
       labels: dates.map(d => fmtLabel(d, days)),
       datasets,
@@ -257,48 +378,85 @@ export class StockComparisonComponent {
     };
   });
 
-  readonly lineChartOptions: ChartOptions<'line'> = {
-    responsive: true,
-    interaction: { mode: 'index', intersect: false },
-    plugins: {
-      legend: { display: true, position: 'top' },
-      title:  { display: true, text: 'Stock Price Comparison' },
-      tooltip: {
-        callbacks: {
-          title: (items) => {
-            const idx = items[0]?.dataIndex;
-            const dates = this.sampledDates();
-            if (idx != null && dates[idx]) {
-              return new Date(dates[idx]).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-            }
-            return '';
+  readonly lineChartOptions = computed<ChartOptions<'line'>>(() => {
+    const showMcap = this.canShowMcapChart();
+    const { unit } = this.mcapScale();
+
+    const scales: any = {};
+    if (showMcap) {
+      // Stack the two y-axes. In this Chart.js build, `y1` renders on TOP
+      // and `y` on the BOTTOM of the stack. So we put price on `y1` (top, 70%)
+      // and market cap on `y` (bottom, 30%).
+      scales.y = {
+        position: 'left',
+        stack: 'main',
+        stackWeight: 3,
+        offset: true,
+        title: { display: true, text: `\u20B9 ${unit}` },
+        grid: { drawOnChartArea: true },
+        ticks: { callback: (v: any) => `${(+v).toLocaleString('en-IN')}` },
+        beginAtZero: true,
+      };
+      scales.y1 = {
+        position: 'left',
+        stack: 'main',
+        stackWeight: 7,
+        offset: true,
+        title: { display: true, text: 'Price (\u20B9)' },
+        ticks: { callback: (v: any) => `\u20B9${v}` },
+      };
+    } else {
+      scales.y = {
+        position: 'left',
+        title: { display: true, text: 'Price (\u20B9)' },
+        ticks: { callback: (v: any) => `\u20B9${v}` },
+      };
+    }
+    scales.x = {
+      title: { display: true, text: 'Date' },
+      ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 12 },
+    };
+
+    return {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: true, position: 'top' },
+        title:  { display: true, text: showMcap ? 'Stock Price & Market Cap' : 'Stock Price Comparison' },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              const idx = items[0]?.dataIndex;
+              const dates = this.sampledDates();
+              if (idx != null && dates[idx]) {
+                return new Date(dates[idx]).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+              }
+              return '';
+            },
+            label: ctx => {
+              const v = ctx.parsed.y;
+              if ((ctx.dataset as any).type === 'bar') {
+                // Market cap dataset
+                return v != null
+                  ? `${ctx.dataset.label}: ${v.toLocaleString('en-IN')}`
+                  : `${ctx.dataset.label}: N/A`;
+              }
+              const pct = this.pctChangeData()[ctx.datasetIndex]?.[ctx.dataIndex];
+              const pctStr = pct != null ? ` | ${pct >= 0 ? '+' : ''}${pct}%` : '';
+              return v != null
+                ? `${ctx.dataset.label}: \u20B9${v.toLocaleString('en-IN')}${pctStr}`
+                : `${ctx.dataset.label}: N/A`;
+            },
+            labelColor: ctx => ({
+              borderColor: ctx.dataset.borderColor as string,
+              backgroundColor: ctx.dataset.borderColor as string,
+            }),
           },
-          label: ctx => {
-            const v = ctx.parsed.y;
-            const pct = this.pctChangeData()[ctx.datasetIndex]?.[ctx.dataIndex];
-            const pctStr = pct != null ? ` | ${pct >= 0 ? '+' : ''}${pct}%` : '';
-            return v != null
-              ? `${ctx.dataset.label}: \u20B9${v.toLocaleString('en-IN')}${pctStr}`
-              : `${ctx.dataset.label}: N/A`;
-          },
-          labelColor: ctx => ({
-            borderColor: ctx.dataset.borderColor as string,
-            backgroundColor: ctx.dataset.borderColor as string,
-          }),
         },
       },
-    },
-    scales: {
-      y: {
-        title: { display: true, text: 'Price (\u20B9)' },
-        ticks: { callback: v => `\u20B9${v}` },
-      },
-      x: {
-        title: { display: true, text: 'Date' },
-        ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 12 },
-      },
-    },
-  };
+      scales,
+    };
+  });
 
   readonly growthChartOptions = computed<ChartOptions<'line'>>(() => {
     const allPcts = this.tickerDatasets().flatMap(ds => ds.points.map(p => p.pct));
@@ -396,6 +554,66 @@ export class StockComparisonComponent {
     this.tickerDatasets().some(ds => ds.points.length > 0)
   );
 
+  // ── Market cap chart ────────────────────────────────────────────────────
+
+  /** Whether mcap can actually be rendered (single stock + toggle on + data in range). */
+  readonly canShowMcapChart = computed(() => {
+    if (!this.showMarketCap()) return false;
+    const stocks = this.addedStocks();
+    if (stocks.length !== 1) return false;
+    if (!stocks[0].mcapLoaded) return false;
+    return this.mcapFiltered().length > 0;
+  });
+
+  /** Notice when the toggle is on but mcap can't render. */
+  readonly mcapNotice = computed<string>(() => {
+    if (!this.showMarketCap()) return '';
+    const stocks = this.addedStocks();
+    if (stocks.length === 0) return '';
+    if (stocks.length > 1) {
+      return 'Market cap view is available only when a single stock is selected. Remove other tickers to view it.';
+    }
+    const s = stocks[0];
+    if (this.loadingMcapIsins().has(s.isin)) return 'Loading market cap data…';
+    if (s.mcapLoaded && this.mcapFiltered().length === 0) {
+      return 'No market cap data available for the selected range.';
+    }
+    return '';
+  });
+
+  /** Auto-scale: divisor + label depending on magnitude in the active range. */
+  private readonly mcapScale = computed<{ divisor: number; unit: string }>(() => {
+    const series = this.mcapFiltered();
+    if (series.length === 0) return { divisor: 1e7, unit: 'Cr' };
+    const max = Math.max(0, ...series.map(p => p.market_cap ?? 0));
+    if (max >= 1e12) return { divisor: 1e12, unit: 'Lakh Cr' };
+    return { divisor: 1e7, unit: 'Cr' };
+  });
+
+  /** Mcap series filtered to the active range (drives the bar chart's own x-axis). */
+  private readonly mcapFiltered = computed<McapDataPoint[]>(() => {
+    const stocks = this.addedStocks();
+    if (stocks.length !== 1) return [];
+    const stock = stocks[0];
+    const days = this.rangeDays();
+    const isCustom = this.selectedRange() === 'custom';
+    const from = isCustom ? this.customFrom() : undefined;
+    const to   = isCustom ? this.customTo() : undefined;
+
+    const series = (stock.mcap ?? []).filter(p => p.market_cap != null && p.market_cap > 0);
+    if (series.length === 0) return [];
+
+    if (from && to) {
+      return series.filter(p => p.date >= from && p.date <= to);
+    }
+    // Predefined ranges anchored to today, matching the price series window.
+    const todayStr = toDateStr(new Date());
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffStr = toDateStr(cutoff);
+    return series.filter(p => p.date >= cutoffStr && p.date <= todayStr);
+  });
+
   // ── Methods ─────────────────────────────────────────────────────────────
 
   onSearchInput(q: string): void {
@@ -465,10 +683,87 @@ export class StockComparisonComponent {
 
   removeStock(isin: string): void {
     this.addedStocks.update(list => list.filter(s => s.isin !== isin));
+    this.customFetchedRanges.delete(isin);
+    this.mcapFetchedRanges.delete(isin);
+    this.loadingMcapIsins.update(s => { const n = new Set(s); n.delete(isin); return n; });
+  }
+
+  private fetchMcap(isin: string, fromArg?: string, toArg?: string): void {
+    const from = fromArg ?? toDateStr(new Date(Date.now() - 365 * 24 * 60 * 60 * 1000));
+    const to   = toArg   ?? toDateStr(new Date());
+
+    const fetchKey = `${from}|${to}`;
+    const fetched  = this.mcapFetchedRanges.get(isin) ?? new Set<string>();
+    if (fetched.has(fetchKey)) return;
+    fetched.add(fetchKey);
+    this.mcapFetchedRanges.set(isin, fetched);
+
+    this.loadingMcapIsins.update(s => { const n = new Set(s); n.add(isin); return n; });
+    const url = `${API_BASE}/mcap/${isin}?start_date=${from}&end_date=${to}`;
+    this.http.get<McapApiResponse>(url).subscribe({
+      next: res => {
+        const fresh = (res.data ?? []).sort((a, b) => a.date.localeCompare(b.date));
+        this.addedStocks.update(list => list.map(s =>
+          s.isin === isin
+            ? { ...s, mcap: mergeMcapByDate(s.mcap ?? [], fresh), mcapLoaded: true }
+            : s
+        ));
+        this.loadingMcapIsins.update(s => { const n = new Set(s); n.delete(isin); return n; });
+      },
+      error: () => {
+        // 404 = no mcap data; mark loaded with whatever we already have so we
+        // don't keep retrying this exact range. Allow re-trying other ranges.
+        this.addedStocks.update(list => list.map(s =>
+          s.isin === isin ? { ...s, mcap: s.mcap ?? [], mcapLoaded: true } : s
+        ));
+        this.loadingMcapIsins.update(s => { const n = new Set(s); n.delete(isin); return n; });
+      },
+    });
+  }
+
+  private ensureCustomRangeData(from: string, to: string): void {
+    for (const stock of this.addedStocks()) {
+      if (this.loadingIsins().has(stock.isin)) continue;
+
+      const data    = stock.data;
+      const minDate = data.length > 0 ? data[0].date : null;
+      const maxDate = data.length > 0 ? data[data.length - 1].date : null;
+
+      const needsOlder = minDate === null || minDate > from;
+      const needsNewer = maxDate === null || maxDate < to;
+      if (!needsOlder && !needsNewer) continue;
+
+      const fetchKey = `${from}|${to}`;
+      const fetched  = this.customFetchedRanges.get(stock.isin) ?? new Set<string>();
+      if (fetched.has(fetchKey)) continue;
+      fetched.add(fetchKey);
+      this.customFetchedRanges.set(stock.isin, fetched);
+
+      this.loadingIsins.update(s => { const n = new Set(s); n.add(stock.isin); return n; });
+      this.http.get<ApiStockResponse>(
+        `${API_BASE}/stocks/${stock.isin}?start_date=${from}&end_date=${to}`
+      ).subscribe({
+        next: res => {
+          const fresh = res.nse?.data ?? [];
+          this.addedStocks.update(list => list.map(s =>
+            s.isin === stock.isin ? { ...s, data: mergeByDate(s.data, fresh) } : s
+          ));
+          this.loadingIsins.update(s => { const n = new Set(s); n.delete(stock.isin); return n; });
+        },
+        error: () => {
+          this.loadingIsins.update(s => { const n = new Set(s); n.delete(stock.isin); return n; });
+          // Allow a retry on next change.
+          fetched.delete(fetchKey);
+          this.showError(`Failed to load ${stock.symbol} data for ${from} → ${to}.`);
+        },
+      });
+    }
   }
 
   clearAll(): void {
     this.addedStocks.set([]);
+    this.customFetchedRanges.clear();
+    this.mcapFetchedRanges.clear();
   }
 
   setRange(key: RangeKey): void {

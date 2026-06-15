@@ -64,16 +64,36 @@ export class AuthService {
         )
         .subscribe({
           next: (res) => {
-            localStorage.setItem(this.tokenKey, res.access_token);
-            localStorage.setItem(this.userKey, JSON.stringify(res.user));
-            this.userSubject.next(res.user);
-            this.router.navigate(['/countries']);
+            this.applyAuth(res);
           },
           error: (err) => {
             console.error('Login failed', err);
           },
         });
     });
+  }
+
+  /**
+   * Dev-only login bypass. Backend must have DEV_AUTH=1 (and ENV != production).
+   * Surfaced from the login screen only when `environment.devAuth` is true.
+   */
+  devLogin(email: string, role: 'user' | 'admin' = 'user'): Observable<{ access_token: string; user: User }> {
+    const obs = this.http.post<{ access_token: string; user: User }>(
+      `${environment.apiUrl}/auth/dev-login`,
+      { email, role },
+    );
+    obs.subscribe({
+      next: (res) => this.applyAuth(res),
+      error: (err) => console.error('Dev login failed', err),
+    });
+    return obs;
+  }
+
+  private applyAuth(res: { access_token: string; user: User }): void {
+    localStorage.setItem(this.tokenKey, res.access_token);
+    localStorage.setItem(this.userKey, JSON.stringify(res.user));
+    this.userSubject.next(res.user);
+    this.router.navigate(['/countries']);
   }
 
   logout(): void {

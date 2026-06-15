@@ -118,6 +118,15 @@
           <button type="button" class="sc-range-btn" [class.active]="chartMode() === 'line'" (click)="chartMode.set('line')">Line</button>
           <button type="button" class="sc-range-btn" [class.active]="chartMode() === 'area'" (click)="chartMode.set('area')">Area</button>
         </span>
+
+        <label class="sc-mcap-checkbox">
+          <input
+            type="checkbox"
+            [checked]="showMarketCap()"
+            (change)="showMarketCap.set($any($event.target).checked)"
+          />
+          <span>Market Cap</span>
+        </label>
       }
     </div>
 
@@ -181,11 +190,16 @@
       } @else {
         <canvas baseChart
           [data]="lineChartData()"
-          [options]="lineChartOptions"
+          [options]="lineChartOptions()"
           type="line">
         </canvas>
       }
     </div>
+
+    <!-- Market Cap notice (e.g. multi-stock or no data in range) -->
+    @if (compareMode() === 'price' && showMarketCap() && mcapNotice()) {
+      <p class="sc-mcap-notice">{{ mcapNotice() }}</p>
+    }
 
     <!-- Summary table -->
     <div class="sc-table-wrapper">
