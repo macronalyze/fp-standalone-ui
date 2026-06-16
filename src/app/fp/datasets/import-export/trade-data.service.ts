@@ -1,20 +1,10 @@
 import { Injectable, inject } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
 import { Observable, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 
-export type TradeDatasetId = 'export-data' | 'import-data';
+import { DataService, DatasetDetail } from '../../../services/data.service';
 
-interface TradeDatasetRaw {
-  id: string;
-  name: string;
-  shortName: string;
-  country: string;
-  source: string;
-  description: string;
-  commodities: string[];
-  monthly: Array<{ month: string; data: Record<string, string | number> }>;
-}
+export type TradeDatasetId = 'export-data' | 'import-data';
 
 export interface TradeMonthlyPoint {
   period: string;
@@ -37,21 +27,6 @@ export interface TradeCountryOption {
   id: string;
   name: string;
 }
-
-const MONTH_MAP: Record<string, number> = {
-  jan: 1,
-  feb: 2,
-  mar: 3,
-  apr: 4,
-  may: 5,
-  jun: 6,
-  jul: 7,
-  aug: 8,
-  sep: 9,
-  oct: 10,
-  nov: 11,
-  dec: 12,
-};
 
 const COUNTRY_OPTIONS: TradeCountryOption[] = [
   { id: 'india', name: 'India' },
@@ -78,7 +53,7 @@ const COUNTRY_OPTIONS: TradeCountryOption[] = [
 
 @Injectable({ providedIn: 'root' })
 export class TradeDataService {
-  private http = inject(HttpClient);
+  private dataService = inject(DataService);
 
   getCountryOptions(baseCountry: string): TradeCountryOption[] {
     const options = COUNTRY_OPTIONS.filter((country) => country.id !== baseCountry);
@@ -87,59 +62,33 @@ export class TradeDataService {
   }
 
   getDataset(country: string, datasetId: TradeDatasetId): Observable<TradeDataset> {
-    return this.http
-      .get<TradeDatasetRaw>(`assets/data/${country}/${datasetId}.json`)
-      .pipe(map((raw) => this.normalizeDataset(raw)));
+    return this.dataService
+      .getDatasetDetail(country, datasetId)
+      .pipe(map((detail) => this.toTradeDataset(detail)));
   }
 
   getDatasetOrNull(country: string, datasetId: TradeDatasetId): Observable<TradeDataset | null> {
     return this.getDataset(country, datasetId).pipe(catchError(() => of(null)));
   }
 
-  private normalizeDataset(raw: TradeDatasetRaw): TradeDataset {
-    const monthly = (raw.monthly ?? [])
-      .map((entry) => {
-        const normalizedPeriod = this.toPeriodKey(entry.month);
-        const normalizedValues: Record<string, number> = {};
-
-        Object.entries(entry.data ?? {}).forEach(([commodity, value]) => {
-          const numberValue = Number(value);
-          normalizedValues[commodity] = Number.isFinite(numberValue) ? numberValue : 0;
-        });
-
-        return {
-          period: normalizedPeriod,
-          label: this.toDisplayLabel(normalizedPeriod),
-          data: normalizedValues,
-        };
-      })
+  private toTradeDataset(detail: DatasetDetail): TradeDataset {
+    const monthly: TradeMonthlyPoint[] = (detail.monthly ?? [])
+      .map((entry) => ({
+        period: entry.period,
+        label: entry.label,
+        data: { ...(entry.values ?? {}) },
+      }))
       .sort((a, b) => a.period.localeCompare(b.period));
 
     return {
-      id: raw.id,
-      name: raw.name,
-      shortName: raw.shortName,
-      country: raw.country,
-      source: raw.source,
-      description: raw.description,
-      commodities: raw.commodities ?? [],
+      id: detail.id,
+      name: detail.name,
+      shortName: detail.shortName,
+      country: detail.country,
+      source: detail.source ?? '',
+      description: detail.description ?? '',
+      commodities: detail.commodities ?? [],
       monthly,
     };
-  }
-
-  private toPeriodKey(monthCode: string): string {
-    const [monthPart = '', yearPart = ''] = monthCode.toLowerCase().split('-');
-    const monthNumber = MONTH_MAP[monthPart] ?? 1;
-    const twoDigitYear = Number(yearPart);
-    const fullYear = twoDigitYear >= 70 ? 1900 + twoDigitYear : 2000 + twoDigitYear;
-    return `${fullYear}-${String(monthNumber).padStart(2, '0')}`;
-  }
-
-  private toDisplayLabel(period: string): string {
-    const [yearRaw, monthRaw] = period.split('-');
-    const year = Number(yearRaw);
-    const month = Number(monthRaw);
-    const date = new Date(year, Math.max(0, month - 1), 1);
-    return date.toLocaleString('en-US', { month: 'short', year: 'numeric' });
   }
 }

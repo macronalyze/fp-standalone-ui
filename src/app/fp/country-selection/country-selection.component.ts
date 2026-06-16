@@ -183,7 +183,7 @@ export class CountrySelectionComponent {
   searchTerm = signal('');
 
   countries = signal<CountryOption[]>([
-    { id: 'india', name: 'India', flag: '🇮🇳', datasets: 0, enabled: false },
+    { id: 'india', name: 'India', flag: '🇮🇳', datasets: 0, enabled: true },
     { id: 'usa', name: 'United States', flag: '🇺🇸', datasets: 0, enabled: false },
     { id: 'uk', name: 'United Kingdom', flag: '🇬🇧', datasets: 0, enabled: false },
     { id: 'canada', name: 'Canada', flag: '🇨🇦', datasets: 0, enabled: false },
@@ -229,25 +229,26 @@ export class CountrySelectionComponent {
   }
 
   private refreshCountryDatasetCounts(): void {
-    this.countries().forEach((country) => {
-      this.dataService.getCountryDatasets(country.id).pipe(
-        catchError(() => of({ datasets: [] }))
-      ).subscribe((response) => {
-        const datasetsCount = response.datasets?.length ?? 0;
-        this.countries.update((currentCountries) =>
-          currentCountries.map((currentCountry) => {
-            if (currentCountry.id !== country.id) {
-              return currentCountry;
-            }
+    this.countries()
+      .filter((country) => country.enabled)
+      .forEach((country) => {
+        this.dataService.getCountryDatasets(country.id).pipe(
+          catchError(() => of({ datasets: [] }))
+        ).subscribe((response) => {
+          const datasetsCount = response.datasets?.length ?? 0;
+          this.countries.update((currentCountries) =>
+            currentCountries.map((currentCountry) => {
+              if (currentCountry.id !== country.id) {
+                return currentCountry;
+              }
 
-            return {
-              ...currentCountry,
-              datasets: datasetsCount,
-              enabled: datasetsCount > 0,
-            };
-          })
-        );
+              return {
+                ...currentCountry,
+                datasets: datasetsCount,
+              };
+            })
+          );
+        });
       });
-    });
   }
 }

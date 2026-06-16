@@ -304,7 +304,7 @@ export class EightCoreIndustriesComponent implements OnInit {
     return d ? d.monthly[d.monthly.length - 1] : undefined;
   });
 
-  latestOverallGrowth = computed(() => this.latestEntry()?.growth['overall'] ?? null);
+  latestOverallGrowth = computed(() => this.latestEntry()?.growth?.['overall'] ?? null);
 
   monthlyReversed = computed(() => {
     const d = this.detail();
@@ -376,7 +376,7 @@ export class EightCoreIndustriesComponent implements OnInit {
       datasets: [
         {
           label: 'Overall Index',
-          data: months.map(m => m.index['overall']),
+          data: months.map(m => m.index?.['overall'] ?? null),
           backgroundColor: 'rgba(66,165,245,0.6)',
           borderColor: '#42a5f5',
           borderWidth: 1,
@@ -384,7 +384,7 @@ export class EightCoreIndustriesComponent implements OnInit {
         },
         {
           label: 'YoY Growth %',
-          data: months.map(m => m.growth['overall']),
+          data: months.map(m => m.growth?.['overall'] ?? null),
           type: 'line' as any,
           borderColor: '#ffa726',
           backgroundColor: 'rgba(255,167,38,0.1)',
@@ -449,7 +449,7 @@ export class EightCoreIndustriesComponent implements OnInit {
     const d = this.detail();
     const latest = this.latestEntry();
     if (!d || !latest) return { labels: [], datasets: [] };
-    const growths = d.sectors.map(s => latest.growth[s.id]);
+    const growths = d.sectors.map(s => latest.growth?.[s.id] ?? 0);
     return {
       labels: d.sectors.map(s => s.name),
       datasets: [{
@@ -484,14 +484,14 @@ export class EightCoreIndustriesComponent implements OnInit {
     const d = this.detail();
     if (!d) return { labels: [], datasets: [] };
     const years = d.yearly;
-    const growths = years.map(y => y.growth['overall']);
+    const growths = years.map(y => y.growth?.['overall'] ?? null);
     return {
       labels: years.map(y => y.year),
       datasets: [{
         label: 'Overall Growth %',
         data: growths,
-        backgroundColor: growths.map(g => g >= 0 ? 'rgba(66,165,245,0.7)' : 'rgba(244,67,54,0.7)'),
-        borderColor: growths.map(g => g >= 0 ? '#42a5f5' : '#f44336'),
+        backgroundColor: growths.map(g => (g ?? 0) >= 0 ? 'rgba(66,165,245,0.7)' : 'rgba(244,67,54,0.7)'),
+        borderColor: growths.map(g => (g ?? 0) >= 0 ? '#42a5f5' : '#f44336'),
         borderWidth: 1,
       }],
     };
@@ -522,7 +522,7 @@ export class EightCoreIndustriesComponent implements OnInit {
       labels: months.map(m => m.label),
       datasets: d.sectors.map((s, i) => ({
         label: s.name,
-        data: months.map(m => m.growth[s.id]),
+        data: months.map(m => m.growth?.[s.id] ?? null),
         borderColor: this.getSectorColor(i),
         backgroundColor: this.getSectorColor(i),
         pointBackgroundColor: this.getSectorColor(i),

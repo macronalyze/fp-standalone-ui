@@ -31,19 +31,19 @@ import { DatasetSummary } from '../../services/data.service';
               <mat-icon class="trend-icon">{{ getTrendIcon(dataset.latestGrowth) }}</mat-icon>
             </span>
           </div>
-          @if (dataset.cumulativeGrowth !== undefined) {
+          <!-- @if (dataset.cumulativeGrowth !== undefined) {
             <div class="metric-row">
               <span class="metric-label">Cumulative ({{ dataset.cumulativePeriod }})</span>
               <span class="metric-value" [class]="getTrendClass(dataset.cumulativeGrowth)">
                 {{ formatGrowth(dataset.cumulativeGrowth) }}
               </span>
             </div>
-          }
-          @if (dataset.status === 'provisional') {
+          } -->
+          <!-- @if (dataset.status === 'provisional') {
             <mat-chip-set class="status-chips">
               <mat-chip class="provisional-chip" highlighted>Provisional</mat-chip>
             </mat-chip-set>
-          }
+          } -->
         }
       </mat-card-content>
     </mat-card>
