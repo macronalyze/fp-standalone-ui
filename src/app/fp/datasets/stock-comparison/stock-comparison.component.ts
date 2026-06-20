@@ -11,8 +11,9 @@ import { environment } from '../../../../environments/environment';
 interface SearchResult {
   isin: string;
   name: string;
-  nse_symbol: string;
-  bse_code: number;
+  // Either may be missing: a stock can be listed only on NSE or only on BSE.
+  nse_symbol?: string | null;
+  bse_code?: number | null;
 }
 
 interface SearchResponse {
@@ -36,13 +37,19 @@ interface ApiDataPoint {
 
 interface ApiStockResponse {
   isin: string;
-  nse: { count: number; data: ApiDataPoint[] };
+  // Either exchange may be absent depending on where the stock is listed.
+  nse?: { count: number; data: ApiDataPoint[] } | null;
+  bse?: { count: number; data: ApiDataPoint[] } | null;
 }
+
+type Exchange = 'nse' | 'bse';
 
 interface AddedStock {
   isin: string;
   symbol: string;
   name: string;
+  /** Exchange whose price series backs this stock (NSE preferred, BSE fallback). */
+  exchange: Exchange;
   data: ApiDataPoint[];
   mcap?: McapDataPoint[];
   mcapLoaded?: boolean;
@@ -650,8 +657,9 @@ export class StockComparisonComponent {
   }
 
   addStock(result: SearchResult): void {
+    const fallbackLabel = this.resultLabel(result);
     if (this.addedStocks().some(s => s.isin === result.isin)) {
-      this.showError(`${result.nse_symbol} is already in the comparison.`);
+      this.showError(`${fallbackLabel} is already in the comparison.`);
       return;
     }
     if (this.loadingIsins().has(result.isin)) return;
@@ -667,18 +675,36 @@ export class StockComparisonComponent {
       `${API_BASE}/stocks/${result.isin}?start_date=${startDate}&end_date=${endDate}`
     ).subscribe({
       next: res => {
-        const data = (res.nse?.data ?? []).sort((a, b) => a.date.localeCompare(b.date));
+        // Prefer NSE series; fall back to BSE when the stock is listed only on BSE
+        // (or NSE returned no rows). Without this, BSE-only stocks render an
+        // empty chart because `res.nse` is null.
+        const nseData = res.nse?.data ?? [];
+        const bseData = res.bse?.data ?? [];
+        const useNse  = nseData.length > 0;
+        const data    = (useNse ? nseData : bseData).slice().sort((a, b) => a.date.localeCompare(b.date));
+        const exchange: Exchange = useNse ? 'nse' : 'bse';
+        const symbol = useNse
+          ? (result.nse_symbol || data[0]?.symbol || result.isin)
+          : (data[0]?.symbol || (result.bse_code != null ? `BSE:${result.bse_code}` : result.isin));
+
         this.addedStocks.update(list => [
           ...list,
-          { isin: result.isin, symbol: result.nse_symbol, name: result.name, data },
+          { isin: result.isin, symbol, name: result.name, exchange, data },
         ]);
         this.loadingIsins.update(s => { const n = new Set(s); n.delete(result.isin); return n; });
       },
       error: () => {
         this.loadingIsins.update(s => { const n = new Set(s); n.delete(result.isin); return n; });
-        this.showError(`Failed to load data for ${result.nse_symbol}.`);
+        this.showError(`Failed to load data for ${fallbackLabel}.`);
       },
     });
+  }
+
+  /** Best-effort display label for a search result (handles BSE-only listings). */
+  resultLabel(result: SearchResult): string {
+    if (result.nse_symbol) return result.nse_symbol;
+    if (result.bse_code != null) return `BSE:${result.bse_code}`;
+    return result.isin;
   }
 
   removeStock(isin: string): void {
@@ -744,7 +770,9 @@ export class StockComparisonComponent {
         `${API_BASE}/stocks/${stock.isin}?start_date=${from}&end_date=${to}`
       ).subscribe({
         next: res => {
-          const fresh = res.nse?.data ?? [];
+          // Merge from the same exchange the stock was originally loaded from
+          // so BSE-only stocks keep getting BSE data on custom-range expansion.
+          const fresh = (stock.exchange === 'bse' ? res.bse?.data : res.nse?.data) ?? [];
           this.addedStocks.update(list => list.map(s =>
             s.isin === stock.isin ? { ...s, data: mergeByDate(s.data, fresh) } : s
           ));

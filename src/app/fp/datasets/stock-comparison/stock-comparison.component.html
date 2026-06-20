@@ -47,11 +47,19 @@
               [class.is-loading]="isLoading(result.isin)"
               (click)="addStock(result)"
             >
-              <span class="sc-result-ticker">{{ result.nse_symbol }}</span>
+              <span class="sc-result-ticker">{{ resultLabel(result) }}</span>
               <span class="sc-result-meta">
                 <span class="sc-result-name">{{ result.name }}</span>
-                <span class="sc-result-sep">·</span>
-                <span class="sc-result-bse">BSE {{ result.bse_code }}</span>
+                @if (result.nse_symbol && result.bse_code != null) {
+                  <span class="sc-result-sep">·</span>
+                  <span class="sc-result-bse">BSE {{ result.bse_code }}</span>
+                } @else if (!result.nse_symbol) {
+                  <span class="sc-result-sep">·</span>
+                  <span class="sc-result-bse">BSE only</span>
+                } @else {
+                  <span class="sc-result-sep">·</span>
+                  <span class="sc-result-bse">NSE only</span>
+                }
               </span>
               @if (isLoading(result.isin)) {
                 <span class="sc-badge-loading">&#8987; Loading…</span>
