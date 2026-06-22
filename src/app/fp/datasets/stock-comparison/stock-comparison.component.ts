@@ -14,6 +14,8 @@ interface SearchResult {
   // Either may be missing: a stock can be listed only on NSE or only on BSE.
   nse_symbol?: string | null;
   bse_code?: number | null;
+  industry?: string | null;
+  sector?: string | null;
 }
 
 interface SearchResponse {

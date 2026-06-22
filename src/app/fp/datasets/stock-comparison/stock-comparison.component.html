@@ -49,16 +49,31 @@
             >
               <span class="sc-result-ticker">{{ resultLabel(result) }}</span>
               <span class="sc-result-meta">
-                <span class="sc-result-name">{{ result.name }}</span>
-                @if (result.nse_symbol && result.bse_code != null) {
-                  <span class="sc-result-sep">·</span>
-                  <span class="sc-result-bse">BSE {{ result.bse_code }}</span>
-                } @else if (!result.nse_symbol) {
-                  <span class="sc-result-sep">·</span>
-                  <span class="sc-result-bse">BSE only</span>
-                } @else {
-                  <span class="sc-result-sep">·</span>
-                  <span class="sc-result-bse">NSE only</span>
+                <span class="sc-result-meta-primary">
+                  <span class="sc-result-name">{{ result.name }}</span>
+                  @if (result.nse_symbol && result.bse_code != null) {
+                    <span class="sc-result-sep">·</span>
+                    <span class="sc-result-bse">BSE {{ result.bse_code }}</span>
+                  } @else if (!result.nse_symbol) {
+                    <span class="sc-result-sep">·</span>
+                    <span class="sc-result-bse">BSE only</span>
+                  } @else {
+                    <span class="sc-result-sep">·</span>
+                    <span class="sc-result-bse">NSE only</span>
+                  }
+                </span>
+                @if (result.sector || result.industry) {
+                  <span class="sc-result-meta-secondary">
+                    @if (result.sector) {
+                      <span class="sc-result-sector">{{ result.sector }}</span>
+                    }
+                    @if (result.sector && result.industry) {
+                      <span class="sc-result-sep">·</span>
+                    }
+                    @if (result.industry) {
+                      <span class="sc-result-industry">{{ result.industry }}</span>
+                    }
+                  </span>
                 }
               </span>
               @if (isLoading(result.isin)) {

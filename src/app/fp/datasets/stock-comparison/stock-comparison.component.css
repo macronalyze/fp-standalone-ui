@@ -139,10 +139,28 @@
 
 .sc-result-meta {
   display: flex;
-  gap: 0.35rem;
+  flex-direction: column;
+  gap: 0.15rem;
   font-size: 0.82rem;
   color: #777;
   flex: 1;
+  min-width: 0;
+}
+
+.sc-result-meta-primary {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.sc-result-meta-secondary {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 0.74rem;
+  color: #98a2b3;
 }
 
 .sc-result-sep { color: #ccc; }
