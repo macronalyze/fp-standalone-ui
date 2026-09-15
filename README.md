@@ -49,9 +49,9 @@ src/app/
 			dataset-host.component.ts
 		datasets/
 			dataset-registry.ts
-			eight-core-industries/
-				eight-core-industries.component.ts
-				eight-core-industries-data.service.ts
+			core-industries/
+				core-industries.component.ts
+				core-industries-data.service.ts
 	services/
 		data.service.ts
 		theme.service.ts
@@ -63,7 +63,7 @@ src/app/
 	- `getCountryDatasets(country)` -> catalog file (`datasets.json`)
 	- `getDatasetDetail(country, datasetId)` -> dataset detail file (`{datasetId}.json`)
 - Dataset features can wrap `DataService` with dataset-specific services.
-	- Example: `EightCoreIndustriesDataService`.
+	- Example: `CoreIndustriesDataService`.
 
 ## Dataset Ownership Model
 

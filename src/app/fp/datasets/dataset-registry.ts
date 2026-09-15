@@ -1,5 +1,5 @@
 import { Type } from '@angular/core';
-import { EightCoreIndustriesComponent } from './eight-core-industries/eight-core-industries.component';
+import { CoreIndustriesComponent } from './core-industries/core-industries.component';
 import { ImportExportComponent } from './import-export/import-export.component';
 import { IipItemChartsComponent } from './iip-item-charts/iip-item-charts.component';
 import { StockComparisonComponent } from './stock-comparison/stock-comparison.component';
@@ -11,8 +11,11 @@ interface DatasetExperience {
 }
 
 const DATASET_EXPERIENCES: Record<string, DatasetExperience> = {
+  'core-industries': {
+    component: CoreIndustriesComponent,
+  },
   'eight-core-industries': {
-    component: EightCoreIndustriesComponent,
+    component: CoreIndustriesComponent,
   },
   'import-export': {
     component: ImportExportComponent,

@@ -12,7 +12,17 @@ import { DatasetSummary } from '../../services/data.service';
   template: `
     <mat-card class="dataset-card"
       [class.coming-soon]="dataset.status === 'coming-soon'"
+      [class.archived]="dataset.status === 'archived'"
       [routerLink]="dataset.status !== 'coming-soon' ? ['/country', country, 'datasets', dataset.id] : null">
+
+      @if (dataset.status === 'archived') {
+        <mat-chip-set class="archived-chip-set">
+          <mat-chip class="archived-chip" highlighted>
+            <mat-icon>inventory_2</mat-icon>
+            Archived
+          </mat-chip>
+        </mat-chip-set>
+      }
 
       <mat-card-header>
         <mat-icon mat-card-avatar class="card-icon">{{ dataset.icon }}</mat-icon>
@@ -61,6 +71,32 @@ import { DatasetSummary } from '../../services/data.service';
     .coming-soon {
       opacity: 0.5;
       cursor: default;
+    }
+    .dataset-card.archived {
+      opacity: 0.78;
+      position: relative;
+    }
+    .dataset-card.archived:hover {
+      opacity: 1;
+    }
+    .archived-chip-set {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      z-index: 1;
+    }
+    .archived-chip {
+      font-size: 0.7rem;
+      background-color: rgba(158, 158, 158, 0.85) !important;
+      color: #fff !important;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .archived-chip mat-icon {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
     }
     .card-icon {
       font-size: 28px;

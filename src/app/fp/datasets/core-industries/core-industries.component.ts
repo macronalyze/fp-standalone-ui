@@ -1,8 +1,8 @@
 import { Component, Input, computed, inject, OnInit, signal } from '@angular/core';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { DatasetDetail, MonthlyEntry } from '../../../services/data.service';
 import { ThemeService } from '../../../services/theme.service';
-import { EightCoreIndustriesDataService } from './eight-core-industries-data.service';
+import { CoreIndustriesDataService } from './core-industries-data.service';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
@@ -16,7 +16,7 @@ import { ChartConfiguration, ChartData } from 'chart.js';
 import { DecimalPipe } from '@angular/common';
 
 @Component({
-  selector: 'app-eight-core-industries',
+  selector: 'app-core-industries',
   standalone: true,
   imports: [
     MatCardModule, MatIconModule, MatButtonModule, MatTableModule,
@@ -287,10 +287,11 @@ import { DecimalPipe } from '@angular/common';
     }
   `]
 })
-export class EightCoreIndustriesComponent implements OnInit {
+export class CoreIndustriesComponent implements OnInit {
   @Input({ required: true }) country = 'india';
 
-  private dataService = inject(EightCoreIndustriesDataService);
+  private route = inject(ActivatedRoute);
+  private dataService = inject(CoreIndustriesDataService);
   private themeService = inject(ThemeService);
 
   loading = signal(true);
@@ -572,7 +573,8 @@ export class EightCoreIndustriesComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.dataService.getDetail(this.country).subscribe({
+    const datasetId = this.route.snapshot.paramMap.get('datasetId') ?? 'core-industries';
+    this.dataService.getDetail(this.country, datasetId).subscribe({
       next: (result) => {
         this.detail.set(result);
         const validMonthly = result.monthly
